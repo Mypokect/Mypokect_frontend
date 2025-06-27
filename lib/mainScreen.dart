@@ -1,7 +1,8 @@
-import 'package:app_mobil_finanzas/Screens/home.dart';
-import 'package:app_mobil_finanzas/Theme/Theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import 'Screens/home.dart';
+import 'Theme/Theme.dart';
 
 class Mainscreen extends StatefulWidget {
   const Mainscreen({super.key});

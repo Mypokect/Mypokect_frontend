@@ -1,5 +1,6 @@
-import 'package:app_mobil_finanzas/Screens/Auth/Login.dart';
 import 'package:flutter/material.dart';
+
+import 'Screens/Auth/splash_screen.dart';
 
 void main() {
   runApp(const EasyEconomi());
@@ -13,7 +14,7 @@ class EasyEconomi extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Login()
+      home: SplashScreen()
     );
   }
 }
