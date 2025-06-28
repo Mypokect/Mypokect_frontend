@@ -40,11 +40,11 @@ class _HomeState extends State<Home> {
           ),
           if (screenWidth <= 600)
             Positioned(
-              top: -20,
-              left: 0,
+              top: screenHeight * 0.015, // 1.5% desde arriba
+              left: screenWidth * 0.50,  // 50% del ancho de pantalla
               right: 0,
               child: Image.asset(
-                'assets/images/fondo-moderno-verde-ondulado1.png',
+                'assets/images/fondo-moderno-verde-ondulado-editado.png',
                 fit: BoxFit.contain,
                 width: MediaQuery.of(context).size.width,
               ),
