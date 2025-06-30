@@ -14,39 +14,32 @@ class AuthController {
     required String password,
     required BuildContext context,
   }) async {
-    try {
+    
+      
+      try {
       final response = await _authApi.login(phone: phone, password: password);
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         SharedPreferences prefs = await SharedPreferences.getInstance();
         prefs.setString('toke', jsonData['data']['token']);
+        
 
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => const Mainscreen()),
           (_) => false,
         );
-      } else {
-        // Si status != 200, muestra alerta
-        final jsonData = jsonDecode(response.body);
-        final msg = jsonData['message'] ?? 'Credenciales incorrectas';
-
-        CustomAlert.show(
-          context: context,
-          title: 'Acceso denegado',
-          message: msg,
-          icon: Icons.lock,
-          color: Colors.orange,
-        );
-      }
+      } 
     } catch (e) {
-      // Error general (conexión, parseo, etc.)
+      // Extrae solo el mensaje sin "Exception: ..."
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      print('🧪 Mensaje limpio mostrado al usuario: $msg');
       CustomAlert.show(
         context: context,
-        title: 'Error de conexión',
-        message: 'Intenta de nuevo.',
-        icon: Icons.error_outline,
-        color: Colors.red,
+        title: 'Acceso denegado',
+        message: msg,
+        icon: Icons.lock_outline,
+        color: Colors.orange,
       );
     }
   }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import '../Services/base_url.dart';
@@ -23,11 +25,14 @@ class AuthApi {
             ? response
             : throw Exception('Empty response body');
       } else {
-        throw Exception('Failed to login: ${response.statusCode}');
+        final json = jsonDecode(response.body);
+        final msg = json['message'] ?? 'Error desconocido';
+        throw Exception(msg); // 👈 Solo lanza el mensaje limpio
       }
 
     } catch (e) {
-      throw Exception('Login failed: $e');
+      throw Exception(e.toString().replaceFirst('Exception: ', ''));
+
     }
   }
 }
