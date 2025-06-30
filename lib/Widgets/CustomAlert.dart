@@ -9,7 +9,11 @@ class CustomAlert {
     required IconData icon,
     Duration duration = const Duration(seconds: 4),
   }) {
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    if (overlay == null) {
+      debugPrint('❗ No se pudo obtener el overlay. ¿Estás usando MaterialApp?');
+      return;
+    }
 
     late OverlayEntry entry;
 
