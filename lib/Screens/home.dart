@@ -1,7 +1,8 @@
-import 'package:app_mobil_finanzas/Theme/Theme.dart';
-import 'package:app_mobil_finanzas/Widgets/TextWidget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../Theme/Theme.dart';
+import '../Widgets/TextWidget.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -18,14 +19,26 @@ class _HomeState extends State<Home> {
 
     return Scaffold(
       backgroundColor: AppTheme.primaryColor,
-      appBar: _buildAppBar(),
       body: Stack(
         children: [
+            if (screenWidth <= 600)
+            Positioned(
+              top: 10,
+              left: 0,
+              right: 0,
+              child: Image.asset(
+                'assets/images/fondo-moderno-verde-ondulado1.png',
+                fit: BoxFit.fill,
+                width: MediaQuery.of(context).size.width,
+                height: 200,
+              ),
+          ),
           Column(
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 20,
             children: [
+              SizedBox(height: 65),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Textwidget(
@@ -39,18 +52,9 @@ class _HomeState extends State<Home> {
             ],
           ),
           if (screenWidth <= 600)
-            Positioned(
-              top: screenHeight * 0.015, // 1.5% desde arriba
-              left: screenWidth * 0.50,  // 50% del ancho de pantalla
-              right: 0,
-              child: Image.asset(
-                'assets/images/fondo-moderno-verde-ondulado-editado.png',
-                fit: BoxFit.contain,
-                width: MediaQuery.of(context).size.width,
-              ),
-          ),
+            
           Positioned(
-              top: 35,
+              top: 120,
               left: 20,
               child: Container(
                 width: 180,
@@ -111,8 +115,8 @@ class _HomeState extends State<Home> {
   // AppBar
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: AppTheme.primaryColor,
-      surfaceTintColor: AppTheme.primaryColor,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       leading: IconButton(
         icon: Icon(Icons.settings, color: Colors.white),
         onPressed: () {},
@@ -151,7 +155,7 @@ class _HomeState extends State<Home> {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 10,
               children: [
-                SizedBox(height: 80),
+                SizedBox(height: 70),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Textwidget(text: 'Tu cuenta', color: AppTheme.greyColor, size: 15, fontWeight: FontWeight.w500,),

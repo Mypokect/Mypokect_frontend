@@ -1,11 +1,11 @@
-import 'package:app_mobil_finanzas/Screens/home.dart';
-import 'package:app_mobil_finanzas/Theme/Theme.dart';
-import 'package:app_mobil_finanzas/Widgets/ButtonCustom.dart';
-import 'package:app_mobil_finanzas/Widgets/TextInput.dart';
-import 'package:app_mobil_finanzas/Widgets/TextWidget.dart';
-import 'package:app_mobil_finanzas/mainScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+
+import '../../Controllers/auth_controller.dart';
+import '../../Theme/Theme.dart';
+import '../../Widgets/ButtonCustom.dart';
+import '../../Widgets/TextInput.dart';
+import '../../Widgets/TextWidget.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -15,6 +15,13 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
+
+  final AuthController _authController = AuthController();
+
+  //controladores de texto
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,12 +99,15 @@ class _LoginState extends State<Login> {
               fontWeight: FontWeight.w600),
           Textinput(
             hintText: 'Numero de telefono',
+            controller: _phoneController,
             icon: SvgPicture.asset(
               'assets/svg/user.svg',
             ),
           ),
           Textinput(
             hintText: 'Pin de seguridad',
+            controller: _passwordController,
+            obscureText: true,
             icon: SvgPicture.asset(
               'assets/svg/password.svg',
             ),
@@ -105,12 +115,7 @@ class _LoginState extends State<Login> {
           Buttoncustom(
             text: 'Iniciar Sesion',
             onTap: () async {
-              // Aquí puedes agregar la lógica para iniciar sesión
-              Navigator.pushAndRemoveUntil(
-                context, 
-                MaterialPageRoute(builder: (context) => Mainscreen()),
-                (_) => false, // Esto elimina todas las rutas anteriores
-              );
+              await _authController.login(phone: _phoneController.text, password: _passwordController.text, context: context);
             },
           ),
         ],

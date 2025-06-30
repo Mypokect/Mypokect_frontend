@@ -1,6 +1,7 @@
-import 'package:app_mobil_finanzas/Theme/Theme.dart';
-import 'package:app_mobil_finanzas/Widgets/TextWidget.dart';
 import 'package:flutter/material.dart';
+
+import '../Theme/Theme.dart';
+import 'TextWidget.dart';
 
 class Buttoncustom extends StatelessWidget {
   const Buttoncustom({

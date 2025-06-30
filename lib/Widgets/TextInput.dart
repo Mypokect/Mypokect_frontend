@@ -6,11 +6,15 @@ class Textinput extends StatelessWidget {
     super.key,
     this.icon,
     this.hintText = 'Texto de entrada',
+    required this.controller,
+    this.obscureText = false,
 
     });
 
     final SvgPicture? icon;
     final String hintText;
+    final TextEditingController? controller;
+    final bool obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +35,8 @@ class Textinput extends StatelessWidget {
             ),
           Expanded(
             child: TextFormField(
+              controller: controller,
+              obscureText: obscureText,
               decoration: InputDecoration(
                 hintText: hintText,
                 hintStyle: TextStyle(
