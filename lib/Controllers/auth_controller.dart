@@ -16,6 +16,7 @@ class AuthController {
   }) async {
     try {
       final response = await _authApi.login(phone: phone, password: password);
+      print('Response status: ${response.body}');
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         SharedPreferences prefs = await SharedPreferences.getInstance();
