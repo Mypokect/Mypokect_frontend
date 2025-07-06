@@ -33,7 +33,7 @@ class AuthController {
     } catch (e) {
       // Extrae solo el mensaje sin "Exception: ..."
       final msg = e.toString().replaceFirst('Exception: ', '');
-      print('🧪 Mensaje limpio mostrado al usuario: $msg');
+      //print('🧪 Mensaje limpio mostrado al usuario: $msg');
       CustomAlert.show(
         context: context,
         title: 'Acceso denegado',
