@@ -42,7 +42,7 @@ class Textinput extends StatelessWidget {
                 hintStyle: TextStyle(
                   color: Colors.grey[600],
                   fontSize: 16,
-                  fontFamily: 'Urbanist',
+                  fontFamily: 'Baloo2',
                 ),
                 border: UnderlineInputBorder(
                   borderSide: BorderSide.none
