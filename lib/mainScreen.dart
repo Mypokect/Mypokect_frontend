@@ -1,4 +1,4 @@
-import 'package:MyPocket/Screens/Auth/Login.dart';
+import 'package:MyPocket/Screens/Movements.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -20,12 +20,14 @@ class _MainscreenState extends State<Mainscreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       bottomNavigationBar: _bottomNavigationBar(),
+      backgroundColor: Colors.white,
       body: Center(
         child: IndexedStack(
           index: _currentIndex,
           children: <Widget>[
             Home(),
-            Center(child: Text('Pantalla de ajustes')),
+            Container(),
+            Container(),
           ],
         ),
       ),
@@ -38,6 +40,13 @@ class _MainscreenState extends State<Mainscreen> {
       backgroundColor: Colors.white,
       currentIndex: _currentIndex,
       onTap: (value) {
+        if (value == 2) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => Movements()),
+          );
+          return;
+        }
         setState(() {
           _currentIndex = value;
         });
@@ -71,7 +80,7 @@ class _MainscreenState extends State<Mainscreen> {
               color: AppTheme.primaryColor,
               borderRadius: BorderRadius.all(Radius.circular(50))
             ),
-            child: Icon(Icons.add, color: AppTheme.secondaryColor),
+            child: Icon(Icons.add, color: Colors.white),
           ),
           label: '',
         ),

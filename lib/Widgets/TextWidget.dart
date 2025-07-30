@@ -31,7 +31,7 @@ class Textwidget extends StatelessWidget {
         fontSize: size,
         color: color,
         fontWeight: fontWeight,
-        fontFamily: 'Urbanist',
+        fontFamily: 'Baloo2',
         decoration: textDecoration,
       ),
       textAlign: textAlign,

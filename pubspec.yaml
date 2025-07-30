@@ -51,25 +51,15 @@ flutter:
     - assets/svg/
 
   fonts:
-    - family: Urbanist
+    - family: Baloo2
       fonts:
-        - asset: assets/fonts/Urbanist-Regular.ttf
-        - asset: assets/fonts/Urbanist-Bold.ttf
-          weight: 700
-        - asset: assets/fonts/Urbanist-Italic.ttf
-          style: italic
-        - asset: assets/fonts/Urbanist-BoldItalic.ttf
-        - asset: assets/fonts/Urbanist-Light.ttf
-          weight: 300
-        - asset: assets/fonts/Urbanist-LightItalic.ttf
-        - asset: assets/fonts/Urbanist-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Urbanist-MediumItalic.ttf
-        - asset: assets/fonts/Urbanist-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Urbanist-SemiBoldItalic.ttf
-        - asset: assets/fonts/Urbanist-ExtraBold.ttf
+        - asset: assets/fonts/Baloo2-ExtraBold.ttf
           weight: 800
-        - asset: assets/fonts/Urbanist-ExtraBoldItalic.ttf
-        - asset: assets/fonts/Urbanist-Black.ttf
-          weight: 900
+        - asset: assets/fonts/Baloo2-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Baloo2-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Baloo2-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Baloo2-SemiBold.ttf
+          weight: 600
