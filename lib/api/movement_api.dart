@@ -81,4 +81,37 @@ class MovementApi {
       throw Exception('Error al obtener etiquetas: $e');
     }
   }
+  Future<http.Response> sugerirMovimientoPorVoz({
+  required String transcripcion,
+  required String token,
+}) async {
+  try {
+    // La nueva URL que proporcionaste
+    final url = Uri.parse('${BaseUrl.apiUrl}movements/sugerir-voz');
+    print('🗣️  Enviando transcripción a: $url');
+    print('📝 Transcripción: $transcripcion');
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        // Es crucial especificar que el cuerpo es JSON
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      // El cuerpo debe ser un string JSON codificado
+      body: jsonEncode({
+        'transcripcion': transcripcion,
+      }),
+    );
+
+    print('🔁 Status code sugerencia: ${response.statusCode}');
+    print('📥 Body sugerencia: ${response.body}');
+
+    return response;
+  } catch (e) {
+    print('❌ Error en sugerirMovimientoPorVoz: $e');
+    throw Exception('Error al procesar la sugerencia por voz: $e');
+  }
+}
 }

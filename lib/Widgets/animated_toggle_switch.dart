@@ -1,35 +1,72 @@
+// lib/Widgets/animated_toggle_switch.dart
+
 import 'package:MyPocket/Theme/Theme.dart';
 import 'package:MyPocket/Widgets/TextWidget.dart';
 import 'package:flutter/material.dart';
 
 class AnimatedToggleSwitch extends StatefulWidget {
-  const AnimatedToggleSwitch({Key? key}) : super(key: key);
+  // --- CAMBIO 1: AÑADIR PARÁMETROS DE ENTRADA ---
+  // Recibimos el valor desde el padre (Movements). true = Gasto, false = Ingreso.
+  final bool value;
+  // Recibimos una función para notificar al padre cuando el usuario toca el widget.
+  final ValueChanged<bool> onChanged;
+
+  const AnimatedToggleSwitch({
+    Key? key,
+    required this.value,
+    required this.onChanged,
+  }) : super(key: key);
 
   @override
   State<AnimatedToggleSwitch> createState() => _AnimatedToggleSwitchState();
 }
 
 class _AnimatedToggleSwitchState extends State<AnimatedToggleSwitch> {
-  // 1. Variable de estado para controlar si es 'Ingreso' o 'Gasto'.
+  // Mantenemos tu estado interno para que tus animaciones y diseño no cambien.
   bool _isIngreso = true;
 
-  // Duración y curva de la animación para un efecto suave y moderno.
+  // Mantenemos tus constantes de animación.
   final Duration _animationDuration = const Duration(milliseconds: 350);
   final Curve _animationCurve = Curves.easeInOut;
 
   @override
+  void initState() {
+    super.initState();
+    // --- CAMBIO 2: SINCRONIZACIÓN INICIAL ---
+    // Al iniciar el widget, sincronizamos nuestro estado interno `_isIngreso`
+    // con el valor `_esGasto` que nos llega del padre (`widget.value`).
+    // Aquí hacemos la "traducción":
+    // Si el padre dice que `value` es true (es Gasto), nuestro `_isIngreso` debe ser false.
+    _isIngreso = !widget.value;
+  }
+
+  @override
+  void didUpdateWidget(AnimatedToggleSwitch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // --- CAMBIO 3: SINCRONIZACIÓN EN CALIENTE (LA MAGIA OCURRE AQUÍ) ---
+    // Este método se llama cada vez que el padre reconstruye el widget con un nuevo valor
+    // (por ejemplo, después de la llamada a la API de voz).
+    // Si el valor que nos llega del padre es diferente al que teníamos...
+    if (widget.value != oldWidget.value) {
+      // ...actualizamos nuestro estado interno para que coincida.
+      setState(() {
+        _isIngreso = !widget.value;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 2. GestureDetector para detectar el toque del usuario.
+    // GestureDetector para detectar el toque del usuario.
     return GestureDetector(
       onTap: () {
-        // Al tocar, cambiamos el estado dentro de setState para que la UI se reconstruya.
-        setState(() {
-          _isIngreso = !_isIngreso;
-        });
+        // En lugar de cambiar el estado aquí, notificamos al padre.
+        // El padre cambiará el estado, y luego nos enviará el nuevo valor,
+        // que será capturado por `didUpdateWidget`, manteniendo todo sincronizado.
+        widget.onChanged(!widget.value);
       },
+      // El resto de tu código de diseño no cambia en absoluto.
       child: AnimatedContainer(
-        // 3. AnimatedContainer para el fondo principal.
-        // Podrías animar su color también si quisieras.
         duration: _animationDuration,
         curve: _animationCurve,
         width: 150,
@@ -38,7 +75,7 @@ class _AnimatedToggleSwitchState extends State<AnimatedToggleSwitch> {
         decoration: BoxDecoration(
           color: Colors.grey[100],
           borderRadius: BorderRadius.circular(30),
-          boxShadow: [ // Sombra sutil para un efecto de profundidad
+          boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
               blurRadius: 5,
@@ -46,27 +83,22 @@ class _AnimatedToggleSwitchState extends State<AnimatedToggleSwitch> {
             )
           ],
         ),
-        // 4. Usamos un Stack para poder posicionar libremente el texto y el círculo.
         child: Stack(
           children: [
-            // 5. Círculo animado (el indicador)
             AnimatedAlign(
               duration: _animationDuration,
               curve: _animationCurve,
-              // Alinea el círculo a la derecha para 'Ingreso' y a la izquierda para 'Gasto'.
-              alignment: _isIngreso ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: _isIngreso ? Alignment.centerLeft : Alignment.centerRight,
               child: AnimatedContainer(
                 duration: _animationDuration,
                 curve: _animationCurve,
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  // Cambia el color del círculo según el estado.
                   color: _isIngreso ? AppTheme.primaryColor : Colors.red,
                   borderRadius: BorderRadius.circular(50),
                 ),
                 child: Center(
-                  // Cambia el icono según el estado.
                   child: Icon(
                     _isIngreso ? Icons.arrow_upward : Icons.arrow_downward,
                     color: Colors.white,
@@ -75,18 +107,13 @@ class _AnimatedToggleSwitchState extends State<AnimatedToggleSwitch> {
                 ),
               ),
             ),
-
-            // 6. Texto animado
             AnimatedAlign(
               duration: _animationDuration,
               curve: _animationCurve,
-              // Alinea el texto a la izquierda para 'Ingreso' y a la derecha para 'Gasto'.
-              // El padding asegura que no se pegue al borde.
-              alignment: _isIngreso ? Alignment.centerLeft : Alignment.centerRight,
+              alignment: _isIngreso ? Alignment.centerRight : Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Textwidget(
-                  // Cambia el texto según el estado.
                   text: _isIngreso ? 'Ingreso' : 'Gasto',
                   size: 16,
                   color: Colors.grey[700]!,

@@ -110,5 +110,52 @@ Future<String?> crearEtiqueta(String nombre, BuildContext context) async {
     return null;
   }
 }
+Future<Map<String, dynamic>?> procesarSugerenciaPorVoz({
+  required String transcripcion,
+  required BuildContext context,
+}) async {
+  try {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('toke');
+
+    if (token == null) {
+      throw Exception('Token no disponible. Inicia sesión nuevamente.');
+    }
+
+    // Llama al nuevo método de la API
+    final response = await _movementApi.sugerirMovimientoPorVoz(
+      transcripcion: transcripcion,
+      token: token,
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      
+      // Accede a los datos anidados en "movement_suggestion"
+      final sugerencia = json['movement_suggestion'];
+
+      // Retorna un mapa con los datos que la vista necesita
+      return {
+        'description': sugerencia['description'],
+        'amount': sugerencia['amount'].toString(), // Convertimos a String para el controller
+        'suggested_tag': sugerencia['suggested_tag'],
+      };
+
+    } else {
+      final json = jsonDecode(response.body);
+      final msg = json['message'] ?? 'Error al procesar la transcripción';
+      throw Exception(msg);
+    }
+  } catch (e) {
+    CustomAlert.show(
+      context: context,
+      title: 'Error de Sugerencia',
+      message: e.toString().replaceFirst('Exception: ', ''),
+      icon: Icons.error_outline,
+      color: Colors.red,
+    );
+    return null; // Retorna null si hubo un error
+  }
+}
 
 }
