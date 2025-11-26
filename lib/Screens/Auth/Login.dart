@@ -6,7 +6,8 @@ import '../../Theme/Theme.dart';
 import '../../Widgets/ButtonCustom.dart';
 import '../../Widgets/TextInput.dart';
 import '../../Widgets/TextWidget.dart';
-
+import 'package:flutter/services.dart';
+import 'Register.dart'; // O la ruta correcta donde lo guardaste
 class Login extends StatefulWidget {
   const Login({super.key});
 
@@ -86,7 +87,7 @@ class _LoginState extends State<Login> {
   // body _build Widget
   Widget _buildWidgetBody() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,27 +98,69 @@ class _LoginState extends State<Login> {
               color: AppTheme.primaryColor,
               size: 30,
               fontWeight: FontWeight.w600),
+              
+          // --- INPUT TELÉFONO ---
           Textinput(
-            hintText: 'Numero de telefono',
+            hintText: 'Número de teléfono',
             controller: _phoneController,
-            icon: SvgPicture.asset(
-              'assets/svg/user.svg',
-            ),
+            icon: SvgPicture.asset('assets/svg/user.svg'),
+            keyboardType: TextInputType.phone, 
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
           ),
+          
+          // --- INPUT PASSWORD ---
           Textinput(
             hintText: 'Pin de seguridad',
             controller: _passwordController,
             obscureText: true,
-            icon: SvgPicture.asset(
-              'assets/svg/password.svg',
-            ),
+            icon: SvgPicture.asset('assets/svg/password.svg'),
+            keyboardType: TextInputType.number,
+            maxLength: 4, 
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+            ],
           ),
+          
+          // --- BOTÓN LOGIN ---
           Buttoncustom(
             text: 'Iniciar Sesion',
             onTap: () async {
-              await _authController.login(phone: _phoneController.text, password: _passwordController.text, context: context);
+              await _authController.login(
+                phone: _phoneController.text, 
+                password: _passwordController.text, 
+                context: context
+              );
             },
           ),
+
+          // --- AGREGAR ESTO AL FINAL: LINK AL REGISTRO ---
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Textwidget(
+                text: '¿No tienes cuenta? ', 
+                color: Colors.grey, 
+                size: 14
+              ),
+              GestureDetector(
+                onTap: () {
+                  // Navegar a la pantalla de Registro
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const Registro()),
+                  );
+                },
+                child: Textwidget(
+                  text: 'Regístrate aquí', 
+                  color: AppTheme.primaryColor, 
+                  size: 14, 
+                  fontWeight: FontWeight.bold
+                ),
+              ),
+            ],
+          )
         ],
       ),
     );

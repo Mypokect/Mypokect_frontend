@@ -35,4 +35,36 @@ class AuthApi {
 
     }
   }
+  // En tu archivo api/auth_api.dart
+
+// ... imports y clase ...
+
+  Future<http.Response> register({
+    required String name,
+    required String phone,
+    required String password,
+  }) async {
+    final url = Uri.parse('${BaseUrl.apiUrl}register'); // Asegúrate que baseUrl apunte a /api/auth o /api según configuraste
+    
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({
+        'name': name,
+        'phone': phone,
+        'password': password,
+      }),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return response;
+    } else {
+      // Manejo básico de errores para que el catch del Controller lo capture
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? 'Error desconocido al registrar');
+    }
+  }
 }
