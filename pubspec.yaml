@@ -16,11 +16,18 @@ dependencies:
   flutter_svg: ^2.2.0
   rename: ^3.1.0
   speech_to_text: 7.1.0
+  table_calendar: ^3.1.1
+  flutter_local_notifications: ^17.1.2
+  flutter_staggered_animations: ^1.1.1 
+  timezone: ^0.9.3
+  intl: ^0.20.2 
   flutter:
     sdk: flutter
-
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.8
   avatar_glow: ^3.0.1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:

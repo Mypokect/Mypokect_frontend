@@ -9,13 +9,29 @@ class CustomAlert {
     required IconData icon,
     Duration duration = const Duration(seconds: 4),
   }) {
+    // Primero, verificamos que el contexto siga siendo válido antes de hacer nada.
+    if (!context.mounted) return;
+
     final overlay = Overlay.of(context, rootOverlay: true);
     if (overlay == null) {
-      debugPrint('❗ No se pudo obtener el overlay. ¿Estás usando MaterialApp?');
+      debugPrint('❗ No se pudo obtener el overlay.');
       return;
     }
 
     late OverlayEntry entry;
+
+    // CAMBIO 1: Añadimos una bandera para saber si la alerta está visible.
+    bool isVisible = true;
+
+    // CAMBIO 2: Creamos una función para remover la alerta de forma segura.
+    // Esto evita duplicar código y maneja la bandera de estado.
+    void removeEntry() {
+      // Solo intentamos remover la alerta si todavía está visible.
+      if (isVisible) {
+        isVisible = false; // Marcamos como no visible para que no se intente remover de nuevo.
+        entry.remove();
+      }
+    }
 
     entry = OverlayEntry(
       builder: (context) => Positioned(
@@ -55,7 +71,7 @@ class CustomAlert {
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: Colors.black87,
@@ -64,7 +80,7 @@ class CustomAlert {
                       const SizedBox(height: 4),
                       Text(
                         message,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
                           color: Colors.black54,
                         ),
@@ -73,7 +89,8 @@ class CustomAlert {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () => entry.remove(),
+                  // CAMBIO 3: El botón de cerrar ahora usa nuestra función segura.
+                  onTap: removeEntry,
                   child: Icon(Icons.close, color: Colors.grey.shade500),
                 ),
               ],
@@ -85,8 +102,7 @@ class CustomAlert {
 
     overlay.insert(entry);
 
-    Future.delayed(duration, () {
-      if (overlay.mounted) entry.remove();
-    });
+    // El temporizador también usa nuestra función segura.
+    Future.delayed(duration, removeEntry);
   }
 }
