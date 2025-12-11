@@ -48,19 +48,22 @@ class AuthController {
   }
 
   // --- REGISTRO (NUEVO) ---
-  Future<void> register({
+Future<void> register({
     required String name,
     required String phone,
+    required String countryCode, // <--- RECIBIR AQUÍ
     required String password,
     required BuildContext context,
   }) async {
     try {
-      // Llamada a la API (Asegúrate de agregar este método en AuthApi)
       final response = await _authApi.register(
         name: name, 
         phone: phone, 
+        countryCode: countryCode, // <--- PASAR AQUÍ
         password: password
       );
+      
+      // ... resto del código igual ...
       
       //print('Register Response: ${response.body}'); // Para depurar errores de validación
 
