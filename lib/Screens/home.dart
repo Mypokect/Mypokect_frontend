@@ -1,8 +1,9 @@
+import 'package:MyPocket/Screens/service/simulator_view.dart';
+import 'package:MyPocket/api/user_api.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 // TUS IMPORTS
-import 'package:MyPocket/Screens/service/calendario_page.dart';
+import 'package:MyPocket/features/calendar/presentation/pages/calendar_page.dart';
 import 'package:MyPocket/Screens/service/savings_assistant_page.dart';
 import '../Theme/Theme.dart';
 import '../Widgets/TextWidget.dart';
@@ -181,7 +182,7 @@ Widget _buildWhiteBody() {
       ActionCardData(
         title: "Calendario de Pagos",
         iconData:  Icons.calendar_month,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarioPage())),
+        onTap: () => navigateTo(const CalendarPage()),
       ),
       ActionCardData(
         title: "Asistente Ahorro", 
