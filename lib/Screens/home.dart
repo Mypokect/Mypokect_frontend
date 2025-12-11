@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../Theme/Theme.dart';
 import '../Widgets/TextWidget.dart';
-import '../Widgets/principal_actions_widget.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -120,7 +119,7 @@ class _HomeState extends State<Home> {
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ComprasPage())),
       ),
       ActionCardData(
-        title: "Calendario de Pagos",
+        title: "Calendario",
         iconData:  Icons.calendar_month,
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarioPage())),
       ),

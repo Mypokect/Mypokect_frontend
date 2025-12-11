@@ -1,3 +1,3 @@
 class BaseUrl {
-  static const String apiUrl = 'http://192.168.80.34:8000/api/';
+  static const String apiUrl = 'https://finanzas.diapce-system.com.co/api/';
 }
