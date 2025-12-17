@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Necesario para TextInputFormatter
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
 
 class Textinput extends StatelessWidget {
   const Textinput({
@@ -9,7 +8,6 @@ class Textinput extends StatelessWidget {
     this.hintText = 'Texto de entrada',
     required this.controller,
     this.obscureText = false,
-    // Nuevas propiedades para hacerlo adaptable
     this.keyboardType,
     this.inputFormatters,
     this.maxLength,
@@ -18,12 +16,10 @@ class Textinput extends StatelessWidget {
     this.onChanged,
   });
 
-  final SvgPicture? icon;
+  final Widget? icon; // Cambiado a Widget para mayor flexibilidad
   final String hintText;
   final TextEditingController? controller;
   final bool obscureText;
-  
-  // Definición de las nuevas variables
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final int? maxLength;
@@ -33,51 +29,62 @@ class Textinput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: MediaQuery.of(context).size.width,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      height: 55,
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        children: [
-          if (icon != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: icon,
-            ),
-          Expanded(
-            child: TextFormField(
-              controller: controller,
-              obscureText: obscureText,
-              
-              // Asignamos las propiedades dinámicas
-              keyboardType: keyboardType,
-              inputFormatters: inputFormatters,
-              maxLength: maxLength, // Controla la cantidad de caracteres
-              textInputAction: textInputAction,
-              validator: validator,
-              onChanged: onChanged,
-              
-              decoration: InputDecoration(
-                hintText: hintText,
-                // Esto oculta el contador "0/10" que sale por defecto con maxLength
-                // para que no rompa tu diseño de altura fija (55px)
-                counterText: "", 
-                hintStyle: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 16,
-                  fontFamily: 'Baloo2',
-                ),
-                border: const UnderlineInputBorder(
-                  borderSide: BorderSide.none
-                ),
-              ),
-            ),
-          )
-        ],
+    return TextFormField(
+      controller: controller,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      textInputAction: textInputAction,
+      validator: validator,
+      onChanged: onChanged,
+      
+      // ESTILO DECORATIVO INTERNO
+      decoration: InputDecoration(
+        // 1. Esto pone el fondo gris DENTRO del input, no afuera
+        filled: true,
+        fillColor: Colors.grey[200],
+        
+        // 2. Bordes redondos
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none,
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: BorderSide.none, // Opcional: BorderSide(color: Colors.red)
+        ),
+
+        // 3. Ícono integrado
+        prefixIcon: icon != null 
+            ? Padding(padding: const EdgeInsets.all(12.0), child: icon) 
+            : null,
+            
+        hintText: hintText,
+        hintStyle: TextStyle(
+          color: Colors.grey[600],
+          fontSize: 16,
+          fontFamily: 'Baloo2',
+        ),
+        
+        counterText: "", 
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        
+        // 4. EL ERROR SALDRÁ ABAJO SIN DEFORMAR EL GRIS
+        errorStyle: const TextStyle(
+          color: Colors.redAccent,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          height: 1.0, 
+        ),
       ),
     );
   }
