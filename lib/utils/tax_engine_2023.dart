@@ -1,20 +1,24 @@
 class TaxEngine2023 {
-  // --- CONSTANTES OFICIALES AG 2023 ---
-  static const double UVT = 42412; // Valor UVT 2023
-  
-  // Topes para estar obligado a declarar
-  static const double TOPE_PATRIMONIO = 190854000;
-  static const double TOPE_INGRESOS = 59377000; // Aplica para Ingresos, Consumos, Tarjetas, Consignaciones
+  // --- CONSTANTES OFICIALES RESOLUCIÓN 000227 (AÑO 2025) ---
+  static const double UVT = 49799;
 
-  // Topes de Deducciones (Valores anuales aprox según tu info)
-  static const double TOPE_DEDUC_VIVIENDA = 16600000; // ~1.38M mes
-  static const double TOPE_PREPAGADA = 7048000;       // ~166 UVT
-  static const double DEDUC_DEPENDIENTES_FIJA = 1080000; // Según tu indicación (aunque norma suele ser 10% ingreso)
+  // Topes para estar obligado a declarar (1,400 UVT)
+  static const double TOPE_OBLIGACION_UVT = 1400;
+  static double get topeDeclararPesos => (TOPE_OBLIGACION_UVT * UVT);
+
+  // Topes de Deducciones e Ingresos No Constitutivos
+  static const double LIMITE_VIVIENDA_ANUAL_UVT = 1200; // 100 UVT mes
+  static const double LIMITE_PREPAGADA_ANUAL_UVT = 192; // 16 UVT mes
+
+  // Nueva Deducción por Dependientes (Ley 2277 - FUERA DEL LÍMITE DEL 40%)
+  static const double DEDUC_DEPENDIENTE_EXTRA_UVT = 72; // Por cada uno, hasta 4
 
   // Topes Rentas Exentas
-  static const double TOPE_25_LABORAL_UVT = 240; // 240 UVT (Aprox 10M)
-  static const double TOPE_GLOBAL_40_PCT = 0.40; // Límite general de beneficios
-  static const double TOPE_GLOBAL_UVT = 1340;    // 1340 UVT (Máximo absoluto de beneficios)
+  static const double TOPE_25_LABORAL_UVT =
+      790; // Bajó de 2880 a 790 en la reforma
+  static const double TOPE_GLOBAL_40_PCT = 0.40;
+  static const double TOPE_GLOBAL_ANUAL_UVT =
+      1340; // El tope máximo de beneficios
 
   // --- 1. VERIFICACIÓN DE OBLIGACIÓN ---
   static Map<String, dynamic> checkObligation({
@@ -25,94 +29,116 @@ class TaxEngine2023 {
     required double consignaciones,
   }) {
     List<String> razones = [];
-    
-    if (patrimonio > TOPE_PATRIMONIO) razones.add("Patrimonio supera \$${_fmt(TOPE_PATRIMONIO)}");
-    if (ingresos > TOPE_INGRESOS) razones.add("Ingresos superan \$${_fmt(TOPE_INGRESOS)}");
-    if (tarjetas > TOPE_INGRESOS) razones.add("Gastos Tarjeta superan \$${_fmt(TOPE_INGRESOS)}");
-    if (consumos > TOPE_INGRESOS) razones.add("Compras totales superan \$${_fmt(TOPE_INGRESOS)}");
-    if (consignaciones > TOPE_INGRESOS) razones.add("Consignaciones superan \$${_fmt(TOPE_INGRESOS)}");
+    double tope = topeDeclararPesos;
+
+    if (patrimonio > (4500 * UVT))
+      razones.add(
+          "Patrimonio supera \$${_fmt(4500 * UVT)}"); // 4500 UVT para patrimonio
+    if (ingresos > tope) razones.add("Ingresos superan \$${_fmt(tope)}");
+    if (tarjetas > tope) razones.add("Gastos Tarjeta superan \$${_fmt(tope)}");
+    if (consumos > tope) razones.add("Compras totales superan \$${_fmt(tope)}");
+    if (consignaciones > tope)
+      razones.add("Consignaciones superan \$${_fmt(tope)}");
 
     return {
       'obligado': razones.isNotEmpty,
-      'razones': razones
+      'razones': razones,
+      'uvt_aplicada': UVT
     };
   }
 
   // --- 2. CÁLCULO DE RENTA LÍQUIDA GRAVABLE ---
   static Map<String, double> calculateTax({
     required double ingresosTotales,
-    required double ingresosNoConstitutivos, // Salud + Pensión Obligatoria
+    required double ingresosNoConstitutivos,
     required double deducVivienda,
     required double deducSaludPrep,
-    required double deducDependientes, // Cantidad de dependientes (0 o 1)
+    required int
+        numeroDependientes, // Ahora es numérico para la nueva deducción
     required double aportesVoluntarios,
-    required double costosGastos, // Solo independientes
+    required double costosGastos,
   }) {
     // A. Renta Líquida Ordinaria (Ingresos Netos)
-    double ingresosNetos = ingresosTotales - ingresosNoConstitutivos - costosGastos;
+    double ingresosNetos =
+        (ingresosTotales - ingresosNoConstitutivos - costosGastos)
+            .roundToDouble();
     if (ingresosNetos < 0) ingresosNetos = 0;
 
-    // B. Deducciones (Aplicando topes individuales)
-    double dVivienda = deducVivienda > TOPE_DEDUC_VIVIENDA ? TOPE_DEDUC_VIVIENDA : deducVivienda;
-    double dSalud = deducSaludPrep > TOPE_PREPAGADA ? TOPE_PREPAGADA : deducSaludPrep;
-    // Asumimos que si manda > 0 es que tiene dependientes, aplicamos el monto fijo que indicaste
-    double dDependientes = deducDependientes > 0 ? DEDUC_DEPENDIENTES_FIJA : 0; 
-    
-    double totalDeducciones = dVivienda + dSalud + dDependientes + aportesVoluntarios;
+    // B. Deducción por Dependientes (NUEVA REGLA: FUERA DEL LÍMITE DEL 40%)
+    // 72 UVT por cada dependiente, máximo 4.
+    int numDep = numeroDependientes > 4 ? 4 : numeroDependientes;
+    double deducDependientesExtra =
+        (numDep * DEDUC_DEPENDIENTE_EXTRA_UVT * UVT).roundToDouble();
 
-    // C. Renta Exenta del 25% (Art 206-10)
-    // Base para el 25% = (IngresosNetos - Deducciones)
-    double basePara25 = ingresosNetos - totalDeducciones;
-    double rentaExenta25 = basePara25 > 0 ? basePara25 * 0.25 : 0;
-    
-    // Tope de 240 UVT para el 25%
+    // C. Deducciones (Sujetas al tope del 40%)
+    double dVivienda = deducVivienda > (LIMITE_VIVIENDA_ANUAL_UVT * UVT)
+        ? (LIMITE_VIVIENDA_ANUAL_UVT * UVT)
+        : deducVivienda;
+    double dSalud = deducSaludPrep > (LIMITE_PREPAGADA_ANUAL_UVT * UVT)
+        ? (LIMITE_PREPAGADA_ANUAL_UVT * UVT)
+        : deducSaludPrep;
+
+    double subtotalDeducciones = dVivienda + dSalud + aportesVoluntarios;
+
+    // D. Renta Exenta del 25% (Art 206-10)
+    // Base = (Ingresos Netos - Deducciones Sujetas)
+    double basePara25 = ingresosNetos - subtotalDeducciones;
+    double rentaExenta25 = basePara25 > 0 ? (basePara25 * 0.25) : 0;
+
+    // Tope corregido para 2025: 790 UVT
     double tope25Pesos = TOPE_25_LABORAL_UVT * UVT;
     if (rentaExenta25 > tope25Pesos) rentaExenta25 = tope25Pesos;
 
-    // D. Aplicación Límite Global del 40% (La regla de oro)
-    double beneficiosTotales = totalDeducciones + rentaExenta25;
-    
-    // El límite es el 40% de los ingresos netos
-    double limiteGlobal = ingresosNetos * TOPE_GLOBAL_40_PCT;
-    // O máximo 1340 UVT
-    double topeGlobalUVT = TOPE_GLOBAL_UVT * UVT;
-    if (limiteGlobal > topeGlobalUVT) limiteGlobal = topeGlobalUVT;
+    // E. Aplicación Límite Global del 40% (O 1.340 UVT)
+    double beneficiosSujetosAlTope = subtotalDeducciones + rentaExenta25;
 
-    // Beneficios finales aceptados
-    double beneficiosFinales = beneficiosTotales > limiteGlobal ? limiteGlobal : beneficiosTotales;
+    double limiteGlobal40 = ingresosNetos * TOPE_GLOBAL_40_PCT;
+    double limiteGlobalUVT = TOPE_GLOBAL_ANUAL_UVT * UVT;
 
-    // E. Base Gravable Final
-    double baseGravable = ingresosNetos - beneficiosFinales;
+    // El límite es el menor entre el 40% o las 1.340 UVT
+    double limiteFinalBeneficios =
+        limiteGlobal40 > limiteGlobalUVT ? limiteGlobalUVT : limiteGlobal40;
+
+    // Beneficios totales aceptados después de aplicar el tope
+    double beneficiosAplicadosSujetos =
+        beneficiosSujetosAlTope > limiteFinalBeneficios
+            ? limiteFinalBeneficios
+            : beneficiosSujetosAlTope;
+
+    // F. Base Gravable Final
+    // Se restan los beneficios sujetos al tope Y la deducción especial de dependientes
+    double baseGravable =
+        ingresosNetos - beneficiosAplicadosSujetos - deducDependientesExtra;
     if (baseGravable < 0) baseGravable = 0;
 
-    // F. Cálculo del Impuesto (Tabla Progresiva)
-    double baseUVT = baseGravable / UVT;
+    // G. Cálculo del Impuesto (Tabla Progresiva UVT)
+    double baseUVT = (baseGravable / UVT);
     double impuestoUVT = 0;
 
-    if (baseUVT > 0 && baseUVT <= 1090) {
+    // Tabla de tarifas (Art 241 E.T. - Se mantiene igual en UVT)
+    if (baseUVT <= 1090) {
       impuestoUVT = 0;
-    } else if (baseUVT > 1090 && baseUVT <= 1700) {
+    } else if (baseUVT <= 1700) {
       impuestoUVT = (baseUVT - 1090) * 0.19;
-    } else if (baseUVT > 1700 && baseUVT <= 4100) {
+    } else if (baseUVT <= 4100) {
       impuestoUVT = (baseUVT - 1700) * 0.28 + 116;
-    } else if (baseUVT > 4100 && baseUVT <= 8670) {
+    } else if (baseUVT <= 8670) {
       impuestoUVT = (baseUVT - 4100) * 0.33 + 788;
-    } else if (baseUVT > 8670 && baseUVT <= 18970) {
+    } else if (baseUVT <= 18970) {
       impuestoUVT = (baseUVT - 8670) * 0.35 + 2296;
-    } else if (baseUVT > 18970 && baseUVT <= 31000) {
+    } else if (baseUVT <= 31000) {
       impuestoUVT = (baseUVT - 18970) * 0.37 + 5901;
-    } else if (baseUVT > 31000) {
+    } else {
       impuestoUVT = (baseUVT - 31000) * 0.39 + 10352;
     }
 
-    double impuestoPesos = impuestoUVT * UVT;
-
+    // El resultado final debe ser redondeado al peso más cercano (Pág. 143)
     return {
-      'ingresosNetos': ingresosNetos,
-      'baseGravable': baseGravable,
-      'beneficiosAplicados': beneficiosFinales,
-      'baseUVT': baseUVT,
-      'impuesto': impuestoPesos
+      'ingresosNetos': ingresosNetos.roundToDouble(),
+      'baseGravable': baseGravable.roundToDouble(),
+      'beneficiosTope40': beneficiosAplicadosSujetos.roundToDouble(),
+      'deduccionDependientesExtra': deducDependientesExtra.roundToDouble(),
+      'impuesto': (impuestoUVT * UVT).roundToDouble()
     };
   }
 

@@ -8,9 +8,9 @@ import 'dart:io'; // Para Platform.isIOS, etc.
 // --- 1. IMPORTA EL NUEVO PAQUETE ---
 import 'package:permission_handler/permission_handler.dart';
 
-
 class NotificationService {
-  static final NotificationService _notificationService = NotificationService._internal();
+  static final NotificationService _notificationService =
+      NotificationService._internal();
 
   factory NotificationService() {
     return _notificationService;
@@ -18,7 +18,8 @@ class NotificationService {
 
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -31,7 +32,8 @@ class NotificationService {
       requestAlertPermission: false,
     );
 
-    const InitializationSettings initializationSettings = InitializationSettings(
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
     );
@@ -47,7 +49,8 @@ class NotificationService {
     if (Platform.isIOS) {
       // En iOS, flutter_local_notifications sí puede pedir el permiso.
       await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(
             alert: true,
             badge: true,
@@ -57,15 +60,12 @@ class NotificationService {
       // En Android, usamos permission_handler para pedir el permiso.
       final PermissionStatus status = await Permission.notification.request();
       if (status.isDenied) {
-        // El usuario denegó el permiso. Puedes mostrar un diálogo explicando por qué lo necesitas.
-        print("Permiso de notificaciones denegado.");
       } else if (status.isPermanentlyDenied) {
         // El usuario lo denegó permanentemente. Hay que guiarlo a los ajustes del sistema.
         openAppSettings();
       }
     }
   }
-
 
   Future<void> scheduleNotification({
     required int id,
@@ -82,7 +82,8 @@ class NotificationService {
         android: AndroidNotificationDetails(
           'my_pocket_channel_id',
           'Recordatorios de Pagos',
-          channelDescription: 'Notificaciones para recordatorios de pagos programados.',
+          channelDescription:
+              'Notificaciones para recordatorios de pagos programados.',
           importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
@@ -90,7 +91,8 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       ),
       androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dateAndTime,
     );
   }

@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../api/budget_api.dart';
-import '../../Theme/Theme.dart';
-import '../../Widgets/TextWidget.dart';
-import 'budget_screen.dart'; 
+
+import 'package:MyPocket/api/budget_api.dart';
+import 'package:MyPocket/Theme/theme.dart';
+import 'package:MyPocket/Widgets/common/text_widget.dart';
+import 'package:MyPocket/Widgets/budget/budget_list_card_widget.dart';
+import 'package:MyPocket/Screens/service/budget_screen.dart';
+import 'package:MyPocket/utils/helpers.dart';
 
 class BudgetsListScreen extends StatefulWidget {
-  const BudgetsListScreen({Key? key}) : super(key: key);
+  const BudgetsListScreen({super.key});
 
   @override
-  BudgetsListScreenState createState() => BudgetsListScreenState();
+  State<BudgetsListScreen> createState() => _BudgetsListScreenState();
 }
 
-class BudgetsListScreenState extends State<BudgetsListScreen> {
+class _BudgetsListScreenState extends State<BudgetsListScreen> {
   final BudgetApi _budgetApi = BudgetApi();
   late Future<List<dynamic>> _budgetsFuture;
-  
+
   double _totalGlobal = 0.0;
 
   @override
@@ -26,9 +29,9 @@ class BudgetsListScreenState extends State<BudgetsListScreen> {
   void _loadBudgets() {
     setState(() {
       _budgetsFuture = _budgetApi.getBudgets().then((data) {
-        double sum = 0;
+        double sum = 0.0;
         for (var item in data) {
-          sum += double.tryParse(item['total_amount'].toString()) ?? 0;
+          sum += double.tryParse(item['total_amount'].toString()) ?? 0.0;
         }
         _totalGlobal = sum;
         return data;
@@ -36,339 +39,258 @@ class BudgetsListScreenState extends State<BudgetsListScreen> {
     });
   }
 
-  void _navigateToDetail(Map<String, dynamic>? budget) async {
+  Future<void> _navigateToDetail(Map<String, dynamic>? budget) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => BudgetScreen(existingBudget: budget)),
+      MaterialPageRoute(
+          builder: (context) => BudgetScreen(existingBudget: budget)),
     );
-    _loadBudgets(); 
+    _loadBudgets();
   }
 
-  void _deleteBudget(int id, int index, List<dynamic> currentList) async {
+  Future<void> _deleteBudget(
+      int id, int index, List<dynamic> currentList) async {
     final deletedItem = currentList[index];
-    
     setState(() {
       currentList.removeAt(index);
-      _totalGlobal -= double.tryParse(deletedItem['total_amount'].toString()) ?? 0;
+      _totalGlobal -=
+          double.tryParse(deletedItem['total_amount'].toString()) ?? 0.0;
     });
 
     try {
       await _budgetApi.deleteBudget(id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Plan eliminado"), duration: Duration(seconds: 2)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text("Plan eliminado"), duration: Duration(seconds: 1)),
+        );
+      }
     } catch (e) {
       setState(() {
         currentList.insert(index, deletedItem);
-        _totalGlobal += double.tryParse(deletedItem['total_amount'].toString()) ?? 0;
+        _totalGlobal +=
+            double.tryParse(deletedItem['total_amount'].toString()) ?? 0.0;
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Fondo casi blanco, muy limpio
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // --- 1. HEADER ELÁSTICO ---
-          SliverAppBar(
-            expandedHeight: 220.0,
-            floating: false,
-            pinned: true,
-            backgroundColor: AppTheme.primaryColor,
-            elevation: 0,
-            automaticallyImplyLeading: false,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30))
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              centerTitle: true,
-              title: const Text(
-                "Mis Proyectos", 
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      // Usamos tu color primario y uno un poco más oscuro para dar profundidad
-                      AppTheme.primaryColor,
-                      AppTheme.primaryColor.withOpacity(0.8), 
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    // Decoración de fondo sutil
-                    Positioned(
-                      top: -50, right: -50,
-                      child: CircleAvatar(radius: 100, backgroundColor: Colors.white.withOpacity(0.1)),
-                    ),
-                    Positioned(
-                      bottom: -30, left: 20,
-                      child: CircleAvatar(radius: 60, backgroundColor: Colors.white.withOpacity(0.1)),
-                    ),
-                    
-                    // Contenido del Header
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 20),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.3))
-                            ),
-                            child: const Icon(Icons.account_balance_wallet, color: Colors.white, size: 30),
-                          ),
-                          const SizedBox(height: 15),
-                          const Text(
-                            "TOTAL PLANIFICADO", 
-                            style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)
-                          ),
-                          const SizedBox(height: 5),
-                          FutureBuilder(
-                            future: _budgetsFuture,
-                            builder: (context, snapshot) {
-                              return Text(
-                                snapshot.hasData ? _formatCurrency(_totalGlobal) : "...",
-                                style: const TextStyle(
-                                  color: Colors.white, 
-                                  fontSize: 34, 
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: -1
-                                ),
-                              );
-                            }
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+      backgroundColor: AppTheme.primaryColor,
+      body: Stack(
+        children: [
+          _buildBackgroundImage(),
+          _buildMainContent(),
+          _buildSummaryCard(),
+        ],
+      ),
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
 
-          // --- 2. LISTA DE TARJETAS ---
-          FutureBuilder<List<dynamic>>(
-            future: _budgetsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SliverFillRemaining(child: Center(child: CircularProgressIndicator()));
-              } else if (snapshot.hasError) {
-                return SliverFillRemaining(child: Center(child: Text("Error: ${snapshot.error}")));
-              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const SliverFillRemaining(child: _EmptyStateWidget());
-              }
+  Widget _buildBackgroundImage() {
+    return Positioned(
+      top: 30,
+      left: 0,
+      right: 0,
+      child: Image.asset('assets/images/fondo-moderno-verde-ondulado1.png',
+          fit: BoxFit.fill,
+          width: MediaQuery.of(context).size.width,
+          height: 200),
+    );
+  }
 
-              final budgets = snapshot.data!;
+  Widget _buildMainContent() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 95),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20),
+          child: TextWidget(
+              text: 'Mis Presupuestos',
+              color: Colors.white,
+              size: 24,
+              fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 20),
+        Expanded(
+          child: _buildWhiteBody(),
+        ),
+      ],
+    );
+  }
 
-              return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final budget = budgets[index];
-                      return _buildPremiumCard(budget, index, budgets);
-                    },
-                    childCount: budgets.length,
-                  ),
-                ),
+  Widget _buildWhiteBody() {
+    return Container(
+      width: MediaQuery.of(context).size.width,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2))
+        ],
+      ),
+      child: FutureBuilder<List<dynamic>>(
+        future: _budgetsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return _buildEmptyState();
+          }
+
+          final budgets = snapshot.data!;
+
+          return ListView.builder(
+            padding:
+                const EdgeInsets.only(top: 80, left: 20, right: 20, bottom: 80),
+            itemCount: budgets.length,
+            itemBuilder: (context, index) {
+              final budget = budgets[index];
+              return BudgetListCardWidget(
+                title: budget['title'] ?? 'Sin título',
+                amount:
+                    double.tryParse(budget['total_amount'].toString()) ?? 0.0,
+                mode: budget['mode'] ?? 'manual',
+                onTap: () => _navigateToDetail(budget),
+                onDismiss: () => _deleteBudget(budget['id'], index, budgets),
               );
             },
-          ),
-        ],
-      ),
-      
-      // --- 3. BOTÓN FLOTANTE ELEGANTE ---
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToDetail(null),
-        backgroundColor: Colors.black, // El negro combina bien con todo y se ve moderno
-        elevation: 10,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text("CREAR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          );
+        },
       ),
     );
   }
 
-  // --- TARJETA PREMIUM (COMBINA CON EL TEMA) ---
-  Widget _buildPremiumCard(dynamic budget, int index, List<dynamic> list) {
-    String title = budget['title'] ?? 'Sin título';
-    double total = double.tryParse(budget['total_amount'].toString()) ?? 0.0;
-    String mode = budget['mode'] ?? 'manual';
-    int id = budget['id'];
-
-    bool isAI = mode == 'ai';
-
-    // ESTILOS DINÁMICOS QUE COMBINAN CON TU APP
-    
-    // Si es IA: Usa tu color primario con degradado
-    // Si es Manual: Blanco limpio
-    List<Color> gradient = isAI 
-        ? [AppTheme.primaryColor, AppTheme.primaryColor.withOpacity(0.7)] 
-        : [Colors.white, Colors.white];
-    
-    Color textColor = isAI ? Colors.white : Colors.black87;
-    Color subTextColor = isAI ? Colors.white70 : Colors.grey;
-    Color iconBg = isAI ? Colors.white.withOpacity(0.2) : const Color(0xFFF3F4F6);
-    Color iconColor = isAI ? Colors.white : AppTheme.primaryColor;
-
-    return Dismissible(
-      key: Key(id.toString()),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 20),
+  Widget _buildSummaryCard() {
+    return Positioned(
+      top: 150,
+      left: 20,
+      child: Container(
+        width: 220,
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 5),
         decoration: BoxDecoration(
-          color: const Color(0xFFFF4757),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: const Color(0xFFFF4757).withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 5))]
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2))
+          ],
         ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 30),
-        child: const Icon(Icons.delete_outline, color: Colors.white, size: 32),
-      ),
-      onDismissed: (_) => _deleteBudget(id, index, list),
-      child: GestureDetector(
-        onTap: () => _navigateToDetail(budget),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          height: 120,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(25),
-            gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-            boxShadow: [
-              BoxShadow(
-                color: isAI ? AppTheme.primaryColor.withOpacity(0.3) : Colors.black.withOpacity(0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              )
-            ],
-          ),
-          child: Stack(
-            children: [
-              // Decoración de fondo sutil (Olas abstractas)
-              if (isAI)
-                Positioned(
-                  right: -10, bottom: -10,
-                  child: Icon(Icons.auto_awesome, size: 100, color: Colors.white.withOpacity(0.1)),
-                ),
-
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    // Columna Izquierda: Icono y Datos
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: iconBg,
-                                  borderRadius: BorderRadius.circular(8)
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(isAI ? Icons.bolt : Icons.edit, size: 12, color: iconColor),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isAI ? "INTELIGENCIA ARTIFICIAL" : "MANUAL", 
-                                      style: TextStyle(
-                                        fontSize: 10, 
-                                        fontWeight: FontWeight.w800, 
-                                        color: iconColor
-                                      )
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(),
-                          Text(
-                            title, 
-                            maxLines: 1, 
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.bold)
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            "Presupuesto asignado", 
-                            style: TextStyle(color: subTextColor, fontSize: 12)
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Columna Derecha: Monto Grande
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _formatCurrency(total),
-                          style: TextStyle(
-                            color: textColor, 
-                            fontSize: 20, 
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5
-                          ),
-                        ),
-                      ],
-                    )
-                  ],
-                ),
-              ),
-            ],
-          ),
+        child: Row(
+          children: [
+            _buildSummaryIcon(),
+            const SizedBox(width: 10),
+            _buildSummaryText(),
+          ],
         ),
       ),
     );
   }
 
-  String _formatCurrency(double amount) {
-    return "\$ ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}";
+  Widget _buildSummaryIcon() {
+    return Container(
+      width: 45,
+      height: 45,
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(50),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2))
+          ]),
+      child: Center(
+          child: Icon(Icons.account_balance_wallet,
+              color: AppTheme.primaryColor, size: 28)),
+    );
   }
-}
 
-// Widget Estado Vacío Limpio
-class _EmptyStateWidget extends StatelessWidget {
-  const _EmptyStateWidget();
+  Widget _buildSummaryText() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Total Planificado",
+            style: TextStyle(fontSize: 10, color: Colors.grey)),
+        FutureBuilder(
+            future: _budgetsFuture,
+            builder: (context, snapshot) {
+              return TextWidget(
+                  text: snapshot.hasData ? formatCurrency(_totalGlobal) : "...",
+                  color: AppTheme.primaryColor,
+                  size: 14,
+                  fontWeight: FontWeight.bold);
+            }),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(25),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.05),
-              shape: BoxShape.circle
-            ),
-            child: Icon(Icons.dashboard_outlined, size: 60, color: AppTheme.primaryColor.withOpacity(0.5)),
-          ),
-          const SizedBox(height: 20),
-          Text("Tu tablero está vacío", style: TextStyle(color: Colors.grey[800], fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text("Crea tu primer plan financiero.", style: TextStyle(color: Colors.grey)),
+  Widget _buildFloatingActionButton() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.primaryColor.withValues(alpha: 0.4),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          )
         ],
+      ),
+      child: FloatingActionButton.extended(
+        heroTag: 'fab_budget_list_unique',
+        onPressed: () => _navigateToDetail(null),
+        backgroundColor: AppTheme.primaryColor,
+        elevation: 0,
+        icon:
+            const Icon(Icons.add_circle_outline, color: Colors.white, size: 22),
+        label: const Text("CREAR PLAN",
+            style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 100),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.dashboard_customize_outlined,
+                size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 15),
+            Text("Aún no tienes planes",
+                style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 5),
+            const Text("Toca el botón 'Crear Plan' para empezar.",
+                style: TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
+        ),
       ),
     );
   }
