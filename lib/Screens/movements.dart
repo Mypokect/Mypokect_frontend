@@ -60,6 +60,12 @@ class _MovementsState extends State<Movements> {
 
   void _formatCurrency() {
     if (_montoController.text.isEmpty) return;
+
+    final cursorPosition = _montoController.selection.baseOffset;
+    final textLength = _montoController.text.length;
+
+    if (cursorPosition != textLength) return;
+
     String value = _montoController.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (value.isEmpty) return;
     String formatted = _currencyFormat.format(int.parse(value));
@@ -124,8 +130,10 @@ class _MovementsState extends State<Movements> {
       children: [
         TextWidget(
           text: "\$ ",
-          size: 36,
-          color: _activeColor,
+          size: 85,
+          color: _montoController.text.isEmpty
+              ? Colors.grey.shade400
+              : _activeColor,
           fontWeight: FontWeight.bold,
         ),
         IntrinsicWidth(
@@ -138,15 +146,19 @@ class _MovementsState extends State<Movements> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 85,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               color: _activeColor,
-              fontFamily: 'Baloo2',
-              letterSpacing: -4,
+              fontFamily: 'Poppins',
+              letterSpacing: -2,
               height: 1.0,
             ),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: "0",
-              hintStyle: TextStyle(color: Color(0x1A000000)),
+              hintStyle: TextStyle(
+                color: _montoController.text.isEmpty
+                    ? Colors.grey.shade400
+                    : _activeColor.withOpacity(0.3),
+              ),
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
             ),
@@ -160,86 +172,84 @@ class _MovementsState extends State<Movements> {
     return Row(
       children: [
         Expanded(
-          flex: 1,
-          child: GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              setState(() => _esGasto = true);
-            },
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color:
-                    _esGasto ? AppTheme.expenseDarkColor : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.trending_down,
-                      size: 16,
-                      color: _esGasto ? Colors.white : Colors.black54,
+          flex: 4,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        setState(() => _esGasto = true);
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _esGasto
+                              ? const Color(0xFFE57373)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: TextWidget(
+                            text: "GASTO",
+                            size: 13,
+                            fontWeight: FontWeight.w800,
+                            color: _esGasto ? Colors.white : Colors.black54,
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    TextWidget(
-                      text: "GASTO",
-                      size: 11,
-                      fontWeight: FontWeight.w800,
-                      color: _esGasto ? Colors.white : Colors.black54,
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        setState(() => _esGasto = false);
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: !_esGasto
+                              ? const Color(0xFF4DB6AC)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Center(
+                          child: TextWidget(
+                            text: "INGRESO",
+                            size: 13,
+                            fontWeight: FontWeight.w800,
+                            color: !_esGasto ? Colors.white : Colors.black54,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 16),
         Expanded(
-          flex: 1,
-          child: GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              setState(() => _esGasto = false);
-            },
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color:
-                    !_esGasto ? AppTheme.incomeDarkColor : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.trending_up,
-                      size: 16,
-                      color: !_esGasto ? Colors.white : Colors.black54,
-                    ),
-                    const SizedBox(width: 4),
-                    TextWidget(
-                      text: "INGRESO",
-                      size: 11,
-                      fontWeight: FontWeight.w800,
-                      color: !_esGasto ? Colors.white : Colors.black54,
-                    ),
-                  ],
-                ),
-              ),
+          flex: 6,
+          child: SizedBox(
+            height: 48,
+            child: CampoEtiquetas(
+              etiquetaController: _etiquetaController,
+              etiquetasUsuario: _etiquetasUsuario,
+              onEtiquetaSeleccionada: (tag) =>
+                  setState(() => _etiquetaController.text = tag),
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 3,
-          child: CampoEtiquetas(
-            etiquetaController: _etiquetaController,
-            etiquetasUsuario: _etiquetasUsuario,
-            onEtiquetaSeleccionada: (tag) =>
-                setState(() => _etiquetaController.text = tag),
           ),
         ),
       ],
@@ -252,33 +262,34 @@ class _MovementsState extends State<Movements> {
       children: [
         TextWidget(
           text: "DESCRIPCIÓN",
-          size: 9,
-          fontWeight: FontWeight.w900,
-          color: Colors.grey.shade400,
+          size: 10,
+          fontWeight: FontWeight.w800,
+          color: Colors.grey.shade500,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         TextField(
           controller: _nombreController,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            fontFamily: 'Baloo2',
+            fontFamily: 'Poppins',
             color: Colors.black87,
           ),
           decoration: InputDecoration(
             hintText: "¿Qué es este movimiento?",
             hintStyle: TextStyle(
-              color: Colors.grey.shade400,
+              color: Colors.grey.shade500,
               fontWeight: FontWeight.w500,
+              fontSize: 15,
             ),
-            border: const UnderlineInputBorder(
-              borderSide: BorderSide(color: Colors.grey, width: 0.5),
+            border: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
             ),
             focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: _activeColor, width: 1.5),
+              borderSide: BorderSide(color: _activeColor, width: 2),
             ),
             contentPadding:
-                const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                const EdgeInsets.symmetric(horizontal: 0, vertical: 14),
           ),
         ),
       ],
@@ -287,33 +298,50 @@ class _MovementsState extends State<Movements> {
 
   Widget _buildInvoiceToggle() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.receipt_long_rounded,
-            size: 18,
-            color: _hasInvoice ? AppTheme.primaryColor : Colors.grey.shade400,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: _hasInvoice
+              ? AppTheme.primaryColor.withOpacity(0.1)
+              : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _hasInvoice
+                ? AppTheme.primaryColor.withOpacity(0.3)
+                : Colors.grey.shade300,
+            width: _hasInvoice ? 2 : 1,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextWidget(
-              text: "Factura Electrónica",
-              size: 12,
-              fontWeight: FontWeight.w700,
-              color: _hasInvoice ? AppTheme.primaryColor : Colors.grey.shade500,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.receipt_long_rounded,
+              size: 22,
+              color: _hasInvoice ? AppTheme.primaryColor : Colors.grey.shade400,
             ),
-          ),
-          Switch(
-            value: _hasInvoice,
-            onChanged: (value) {
-              HapticFeedback.lightImpact();
-              setState(() => _hasInvoice = value);
-            },
-            activeColor: AppTheme.primaryColor,
-            inactiveTrackColor: Colors.grey.shade300,
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextWidget(
+                text: "Factura Electrónica",
+                size: 14,
+                fontWeight: FontWeight.w700,
+                color: _hasInvoice ? AppTheme.primaryColor : Colors.black87,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Switch(
+              value: _hasInvoice,
+              onChanged: (value) {
+                HapticFeedback.lightImpact();
+                setState(() => _hasInvoice = value);
+              },
+              activeTrackColor: AppTheme.primaryColor.withOpacity(0.5),
+              inactiveTrackColor: Colors.grey.shade300,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -324,9 +352,9 @@ class _MovementsState extends State<Movements> {
       children: [
         TextWidget(
           text: "MÉTODO DE PAGO",
-          size: 9,
-          fontWeight: FontWeight.w900,
-          color: Colors.grey.shade400,
+          size: 10,
+          fontWeight: FontWeight.w800,
+          color: Colors.grey.shade500,
         ),
         const SizedBox(height: 12),
         Row(
@@ -368,15 +396,15 @@ class _MovementsState extends State<Movements> {
           children: [
             Icon(
               icon,
-              size: 18,
+              size: 20,
               color: isSelected ? Colors.white : Colors.grey.shade400,
             ),
             const SizedBox(width: 8),
             TextWidget(
               text: label,
-              size: 12,
-              fontWeight: FontWeight.w800,
-              color: isSelected ? Colors.white : Colors.grey.shade500,
+              size: 13,
+              fontWeight: FontWeight.w700,
+              color: isSelected ? Colors.white : Colors.black87,
             ),
           ],
         ),
