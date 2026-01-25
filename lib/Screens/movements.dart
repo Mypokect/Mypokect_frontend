@@ -25,6 +25,7 @@ class _MovementsState extends State<Movements> {
   final TextEditingController _montoController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _etiquetaController = TextEditingController();
+  final FocusNode _montoFocusNode = FocusNode();
 
   bool _esGasto = true;
   String _paymentMethod = 'digital';
@@ -218,6 +219,7 @@ class _MovementsState extends State<Movements> {
                       duration: const Duration(milliseconds: 400),
                       child: TextField(
                         controller: _montoController,
+                        focusNode: _montoFocusNode,
                         keyboardType: TextInputType.number,
                         autofocus: true,
                         cursorColor: _activeColor,
@@ -261,16 +263,24 @@ class _MovementsState extends State<Movements> {
                         },
                       ),
                     ),
-                    // Layer 1: Display abreviado con fade suave
+                    // Layer 1: Display abreviado con fade suave (clickeable para editar)
                     if (canAbbreviate)
                       AnimatedOpacity(
                         opacity: _showAbbreviated ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 400),
                         child: GestureDetector(
                           onTap: () {
-                            // Al tocar el display, volver a edición
+                            // Al tocar el display, mostrar TextField y hacer focus
                             _abbreviationTimer?.cancel();
                             setState(() => _showAbbreviated = false);
+                            // Hacer focus en el TextField después de la animación
+                            Future.delayed(const Duration(milliseconds: 100),
+                                () {
+                              if (mounted) {
+                                FocusScope.of(context)
+                                    .requestFocus(_montoFocusNode);
+                              }
+                            });
                           },
                           child: Text(
                             _getAbbreviatedAmount(),
@@ -681,6 +691,7 @@ class _MovementsState extends State<Movements> {
     _montoController.dispose();
     _nombreController.dispose();
     _etiquetaController.dispose();
+    _montoFocusNode.dispose();
     super.dispose();
   }
 }
