@@ -677,6 +677,7 @@ class _MovementsState extends State<Movements> {
 
   Widget _buildMicButton() {
     return GestureDetector(
+      onTap: _toggleVoice, // Nuevo: tap para iniciar/detener
       onLongPress: _startVoice,
       onLongPressUp: _stopVoice,
       child: AvatarGlow(
@@ -689,7 +690,9 @@ class _MovementsState extends State<Movements> {
           width: 62,
           height: 62,
           decoration: BoxDecoration(
-            color: Colors.grey.shade50,
+            color: _isListening
+                ? _activeColor.withOpacity(0.1)
+                : Colors.grey.shade50,
             shape: BoxShape.circle,
             border: Border.all(
               color:
@@ -750,15 +753,61 @@ class _MovementsState extends State<Movements> {
     );
   }
 
+  void _toggleVoice() {
+    if (_isListening) {
+      _stopVoice();
+    } else {
+      _startVoice();
+    }
+  }
+
   void _startVoice() async {
     HapticFeedback.heavyImpact();
-    setState(() => _isListening = true);
-    await _speechToText.listen(
-      onResult: (res) {
-        if (res.finalResult) {
-          _nombreController.text = res.recognizedWords;
+
+    // Verificar disponibilidad del micrófono
+    bool available = await _speechToText.initialize(
+      onError: (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error de micrófono: ${error.errorMsg}'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       },
+      onStatus: (status) {
+        print('Estado del micrófono: $status');
+      },
+    );
+
+    if (!available) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('El micrófono no está disponible'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _isListening = true);
+
+    await _speechToText.listen(
+      onResult: (res) {
+        if (mounted) {
+          setState(() {
+            _nombreController.text = res.recognizedWords;
+          });
+        }
+      },
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 5),
+      partialResults: true,
+      localeId: 'es_ES',
+      cancelOnError: true,
     );
   }
 
