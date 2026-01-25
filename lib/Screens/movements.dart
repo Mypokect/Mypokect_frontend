@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import '../Widgets/common/text_widget.dart';
@@ -36,6 +37,9 @@ class _MovementsState extends State<Movements> {
   final SpeechToText _speechToText = SpeechToText();
   bool _showAbbreviated = false;
   Timer? _abbreviationTimer;
+  Timer? _suggestionTimer;
+  bool _isLoadingSuggestion = false;
+  bool _autoSuggestEnabled = true;
 
   final Color _greenMyPocket = const Color(0xFF006B52);
   final Color _redExpense = const Color(0xFFEF5350);
@@ -60,6 +64,22 @@ class _MovementsState extends State<Movements> {
       _isGoalMode = true;
     }
     _montoController.addListener(_formatCurrency);
+
+    // Listeners para sugerencia automática
+    _nombreController.addListener(_onDescriptionOrAmountChanged);
+    _montoController.addListener(_onDescriptionOrAmountChanged);
+
+    // Cargar preferencia de autosugestión
+    await _loadAutoSuggestPreference();
+  }
+
+  Future<void> _loadAutoSuggestPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _autoSuggestEnabled = prefs.getBool('auto_suggest_tags') ?? true;
+      });
+    }
   }
 
   void _formatCurrency() {
@@ -119,6 +139,52 @@ class _MovementsState extends State<Movements> {
       return _currencyFormat.format(amount);
     } catch (e) {
       return _montoController.text;
+    }
+  }
+
+  void _onDescriptionOrAmountChanged() {
+    // Cancelar timer anterior
+    _suggestionTimer?.cancel();
+
+    // Solo si está habilitada la sugerencia automática
+    if (!_autoSuggestEnabled) return;
+
+    // Solo sugerir si hay descripción Y monto
+    if (_nombreController.text.isEmpty || _montoController.text.isEmpty) {
+      return;
+    }
+
+    // Esperar 1 segundo después de dejar de escribir
+    _suggestionTimer = Timer(const Duration(seconds: 1), () {
+      _sugerirEtiqueta();
+    });
+  }
+
+  Future<void> _sugerirEtiqueta() async {
+    // Solo si el campo está vacío
+    if (_etiquetaController.text.isNotEmpty) return;
+
+    if (mounted) {
+      setState(() => _isLoadingSuggestion = true);
+    }
+
+    try {
+      await _movementController.getCategoriaDesdeApi(
+        nombre: _nombreController.text,
+        valor: _montoController.text.replaceAll('.', '').replaceAll(',', ''),
+        context: context,
+        onSuccess: (tag) {
+          if (mounted && tag != null && _etiquetaController.text.isEmpty) {
+            setState(() {
+              _etiquetaController.text = tag;
+            });
+          }
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingSuggestion = false);
+      }
     }
   }
 
@@ -382,14 +448,57 @@ class _MovementsState extends State<Movements> {
         const SizedBox(width: 16),
         Expanded(
           flex: 6,
-          child: SizedBox(
-            height: 48,
-            child: CampoEtiquetas(
-              etiquetaController: _etiquetaController,
-              etiquetasUsuario: _etiquetasUsuario,
-              onEtiquetaSeleccionada: (tag) =>
-                  setState(() => _etiquetaController.text = tag),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: CampoEtiquetas(
+                    etiquetaController: _etiquetaController,
+                    etiquetasUsuario: _etiquetasUsuario,
+                    isLoadingSuggestion: _isLoadingSuggestion,
+                    onEtiquetaSeleccionada: (tag) =>
+                        setState(() => _etiquetaController.text = tag),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _isLoadingSuggestion ? null : _sugerirEtiqueta,
+                child: Container(
+                  height: 48,
+                  width: 48,
+                  decoration: BoxDecoration(
+                    color: _isLoadingSuggestion
+                        ? Colors.grey.shade300
+                        : AppTheme.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: _isLoadingSuggestion
+                      ? Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                AppTheme.primaryColor,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.lightbulb_outline_rounded,
+                          color: AppTheme.primaryColor,
+                          size: 22,
+                        ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -657,6 +766,47 @@ class _MovementsState extends State<Movements> {
     await _speechToText.stop();
     HapticFeedback.mediumImpact();
     setState(() => _isListening = false);
+
+    // Procesar transcripción con IA
+    if (_nombreController.text.isNotEmpty) {
+      _procesarVozConIA();
+    }
+  }
+
+  void _procesarVozConIA() async {
+    final sugerencia = await _movementController.procesarSugerenciaPorVoz(
+      transcripcion: _nombreController.text,
+      context: context,
+    );
+
+    if (sugerencia != null && mounted) {
+      setState(() {
+        // Descripción limpia
+        _nombreController.text =
+            sugerencia['description'] ?? _nombreController.text;
+
+        // Monto (extraído por IA)
+        final amountStr = sugerencia['amount']?.toString() ?? '';
+        if (amountStr.isNotEmpty && amountStr != '0') {
+          _montoController.text = amountStr;
+        }
+
+        // Etiqueta sugerida
+        _etiquetaController.text = sugerencia['suggested_tag'] ?? '';
+
+        // Tipo (gasto/ingreso)
+        _esGasto = sugerencia['type'] == 'expense';
+
+        // Método de pago
+        _paymentMethod = sugerencia['payment_method'] ?? 'digital';
+
+        // Factura
+        _hasInvoice = sugerencia['has_invoice'] ?? false;
+
+        // Modo meta
+        _isGoalMode = sugerencia['is_goal'] ?? false;
+      });
+    }
   }
 
   void _guardarMovimiento() async {
@@ -670,11 +820,37 @@ class _MovementsState extends State<Movements> {
     final cleanedValue = _montoController.text.replaceAll('.', '');
     double val = double.tryParse(cleanedValue) ?? 0.0;
 
+    // Verificar si la etiqueta existe, si no, crearla
+    String? finalTag = _etiquetaController.text.trim();
+
+    if (finalTag.isNotEmpty) {
+      // Verificar si la etiqueta NO está en la lista actual
+      final tagExists = _etiquetasUsuario
+          .any((tag) => tag.toLowerCase() == finalTag!.toLowerCase());
+
+      if (!tagExists) {
+        // Crear la etiqueta en el backend
+        final createdTag = await _movementController.crearEtiqueta(
+          finalTag,
+          context,
+        );
+
+        if (createdTag != null) {
+          finalTag = createdTag;
+          // Agregar a la lista local para futuras referencias
+          setState(() {
+            _etiquetasUsuario.add(finalTag!);
+          });
+        }
+      }
+    }
+
+    // Guardar el movimiento con la etiqueta (existente o nueva)
     await _movementController.createMovement(
       type: _isGoalMode ? 'expense' : (_esGasto ? 'expense' : 'income'),
       amount: val,
       description: _nombreController.text,
-      tag: _etiquetaController.text,
+      tag: finalTag,
       paymentMethod: _paymentMethod,
       hasInvoice: _hasInvoice,
       context: context,
@@ -688,6 +864,7 @@ class _MovementsState extends State<Movements> {
   @override
   void dispose() {
     _abbreviationTimer?.cancel();
+    _suggestionTimer?.cancel();
     _montoController.dispose();
     _nombreController.dispose();
     _etiquetaController.dispose();

@@ -5,12 +5,14 @@ class CampoEtiquetas extends StatefulWidget {
   final TextEditingController etiquetaController;
   final List<String> etiquetasUsuario;
   final Function(String) onEtiquetaSeleccionada;
+  final bool isLoadingSuggestion;
 
   const CampoEtiquetas({
     super.key,
     required this.etiquetaController,
     required this.etiquetasUsuario,
     required this.onEtiquetaSeleccionada,
+    this.isLoadingSuggestion = false,
   });
 
   @override
@@ -68,13 +70,27 @@ class _CampoEtiquetasState extends State<CampoEtiquetas> {
               fontWeight: FontWeight.w500,
               fontSize: 14,
             ),
-            prefixIcon: Icon(
-              Icons.label_outline_rounded,
-              color: widget.etiquetaController.text.isEmpty
-                  ? AppTheme.greyColor.withOpacity(0.4)
-                  : AppTheme.primaryColor,
-              size: 20,
-            ),
+            prefixIcon: widget.isLoadingSuggestion
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  )
+                : Icon(
+                    Icons.label_outline_rounded,
+                    color: widget.etiquetaController.text.isEmpty
+                        ? AppTheme.greyColor.withOpacity(0.4)
+                        : AppTheme.primaryColor,
+                    size: 20,
+                  ),
             filled: true,
             fillColor: AppTheme.backgroundColor,
             border: OutlineInputBorder(
