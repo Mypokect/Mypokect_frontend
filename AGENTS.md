@@ -19,9 +19,11 @@ flutter format .         # Format all Dart files
 
 ### Testing
 ```bash
-flutter test             # Run all tests
-flutter test test/widget_test.dart  # Run specific test file
-flutter test --name "test_name"    # Run tests matching name pattern
+flutter test                              # Run all tests
+flutter test test/widget_test.dart        # Run specific test file
+flutter test --name "test_name"           # Run tests matching name pattern
+flutter test -v                           # Run with verbose output
+flutter test --coverage                   # Generate coverage report
 ```
 
 ## Project Structure
@@ -134,10 +136,12 @@ factory ModelClass.fromJson(Map<String, dynamic> json) {
 - Set locale to `Locale('es')` in MaterialApp
 
 ### Testing
-- Use `flutter_test` package
+- Use `flutter_test` package for all tests
 - Use `testWidgets()` for widget tests
-- Use `WidgetTester` to interact with widgets
+- Use `WidgetTester` to interact with widgets (`tap()`, `enterText()`, `pumpWidget()`)
 - Use `find.byType()`, `find.text()`, `find.byIcon()` to locate widgets
+- Always use `expect()` assertions for test verification
+- Follow AAA pattern: Arrange, Act, Assert
 
 ### Fonts & Assets
 - Custom font family: `'Baloo2'` (weights: 400, 500, 600, 700, 800)
