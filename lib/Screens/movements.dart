@@ -169,24 +169,19 @@ class _MovementsState extends State<Movements> {
   }
 
   Widget _buildMoneyInput() {
-    // Calcular tamaño dinámico basado en cantidad de dígitos y estado de abreviación
+    // Calcular tamaño dinámico basado en cantidad de dígitos
     final digitsCount =
         _montoController.text.replaceAll(RegExp(r'[^0-9]'), '').length;
 
-    // Determinar si se debe abreviar
-    final shouldAbbreviate = digitsCount >= 5; // 10.000 = 5 dígitos
+    // Determinar si se puede abreviar (>= 10.000 = 5 dígitos)
+    final canAbbreviate = digitsCount >= 5;
 
-    // Tamaño base según dígitos
-    double baseFontSize = (digitsCount > 10
+    // Tamaño base según dígitos (sin cambios)
+    final fontSize = (digitsCount > 10
         ? 60.0
         : digitsCount > 6
             ? 68.0
             : 80.0);
-
-    // Reducir tamaño si está abreviado
-    final displayFontSize = (_showAbbreviated && shouldAbbreviate)
-        ? baseFontSize * 0.7 // 70% del tamaño original (~56px para 80px base)
-        : baseFontSize;
 
     return Center(
       child: Padding(
@@ -197,11 +192,11 @@ class _MovementsState extends State<Movements> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Símbolo $ con animación
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 400),
+              // Símbolo $
+              Text(
+                "\$",
                 style: TextStyle(
-                  fontSize: displayFontSize,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w700,
                   color: _montoController.text.isEmpty
                       ? Colors.grey.shade400
@@ -210,57 +205,90 @@ class _MovementsState extends State<Movements> {
                   letterSpacing: -0.5,
                   height: 1.0,
                 ),
-                child: const Text("\$"),
               ),
               const SizedBox(width: 12),
-              // Campo de edición elegante con animación
+              // Stack: TextField + Display abreviado con fade suave
               Expanded(
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 400),
-                  style: TextStyle(
-                    fontSize: displayFontSize,
-                    fontWeight: FontWeight.w700,
-                    color: _montoController.text.isEmpty
-                        ? Colors.grey.shade400
-                        : _activeColor,
-                    fontFamily: 'Poppins',
-                    letterSpacing: -0.5,
-                    height: 1.0,
-                  ),
-                  child: TextField(
-                    controller: _montoController,
-                    keyboardType: TextInputType.number,
-                    autofocus: true,
-                    cursorColor: _activeColor,
-                    cursorWidth: 2.5,
-                    textAlign: TextAlign.center,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: InputDecoration(
-                      hintText: "0",
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade300,
-                        fontSize: displayFontSize,
-                        fontWeight: FontWeight.w400,
-                        fontFamily: 'Poppins',
-                        letterSpacing: -0.5,
-                        height: 1.0,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Layer 0: TextField (siempre presente, editable)
+                    AnimatedOpacity(
+                      opacity: _showAbbreviated ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 400),
+                      child: TextField(
+                        controller: _montoController,
+                        keyboardType: TextInputType.number,
+                        autofocus: true,
+                        cursorColor: _activeColor,
+                        cursorWidth: 2.5,
+                        textAlign: TextAlign.center,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w700,
+                          color: _montoController.text.isEmpty
+                              ? Colors.grey.shade400
+                              : _activeColor,
+                          fontFamily: 'Poppins',
+                          letterSpacing: -0.5,
+                          height: 1.0,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: "0",
+                          hintStyle: TextStyle(
+                            color: Colors.grey.shade300,
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w400,
+                            fontFamily: 'Poppins',
+                            letterSpacing: -0.5,
+                            height: 1.0,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          isCollapsed: true,
+                        ),
+                        onTap: () {
+                          // Al tocar, cancelar abreviación para mostrar número completo
+                          _abbreviationTimer?.cancel();
+                          setState(() => _showAbbreviated = false);
+                        },
+                        onChanged: (value) {
+                          // Aplicar formateo y mostrar abreviación después de 2 segundos
+                          _formatCurrency();
+                        },
                       ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      isCollapsed: true,
                     ),
-                    onTap: () {
-                      // Al tocar, cancelar abreviación para mostrar número completo
-                      _abbreviationTimer?.cancel();
-                      setState(() => _showAbbreviated = false);
-                    },
-                    onChanged: (value) {
-                      // Aplicar formateo y mostrar abreviación después de 2 segundos
-                      _formatCurrency();
-                    },
-                  ),
+                    // Layer 1: Display abreviado con fade suave
+                    if (canAbbreviate)
+                      AnimatedOpacity(
+                        opacity: _showAbbreviated ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 400),
+                        child: GestureDetector(
+                          onTap: () {
+                            // Al tocar el display, volver a edición
+                            _abbreviationTimer?.cancel();
+                            setState(() => _showAbbreviated = false);
+                          },
+                          child: Text(
+                            _getAbbreviatedAmount(),
+                            style: TextStyle(
+                              fontSize: fontSize,
+                              fontWeight: FontWeight.w700,
+                              color: _montoController.text.isEmpty
+                                  ? Colors.grey.shade400
+                                  : _activeColor,
+                              fontFamily: 'Poppins',
+                              letterSpacing: -0.5,
+                              height: 1.0,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
