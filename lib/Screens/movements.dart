@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 import '../Widgets/common/text_widget.dart';
 import '../Widgets/movements/campo_etiquetas.dart';
@@ -32,6 +33,8 @@ class _MovementsState extends State<Movements> {
   bool _hasInvoice = false;
   List<String> _etiquetasUsuario = [];
   final SpeechToText _speechToText = SpeechToText();
+  bool _showAbbreviated = false;
+  Timer? _abbreviationTimer;
 
   final Color _greenMyPocket = const Color(0xFF006B52);
   final Color _redExpense = const Color(0xFFEF5350);
@@ -61,18 +64,61 @@ class _MovementsState extends State<Movements> {
   void _formatCurrency() {
     if (_montoController.text.isEmpty) return;
 
-    final cursorPosition = _montoController.selection.baseOffset;
-    final textLength = _montoController.text.length;
+    // Cancelar timer anterior
+    _abbreviationTimer?.cancel();
 
-    if (cursorPosition != textLength) return;
+    // Mostrar número completo mientras escribes
+    setState(() => _showAbbreviated = false);
 
     String value = _montoController.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (value.isEmpty) return;
-    String formatted = _currencyFormat.format(int.parse(value));
-    _montoController.value = TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
-    );
+
+    try {
+      String formatted = _currencyFormat.format(BigInt.parse(value));
+
+      _montoController.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(
+          offset: formatted.length,
+        ),
+      );
+    } catch (e) {}
+
+    // Iniciar timer para mostrar abreviación después de 2 segundos
+    _abbreviationTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _showAbbreviated = true);
+      }
+    });
+  }
+
+  String _getAbbreviatedAmount() {
+    String value = _montoController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (value.isEmpty) return "0";
+
+    try {
+      final amount = BigInt.parse(value);
+      final num = amount.toInt();
+
+      // Solo abreviar si es 10.000 o mayor
+      if (num >= 1000000000) {
+        // Billones
+        final billions = num / 1000000000;
+        return billions.toStringAsFixed(billions % 1 == 0 ? 0 : 1) + " B";
+      } else if (num >= 1000000) {
+        // Millones
+        final millions = num / 1000000;
+        return millions.toStringAsFixed(millions % 1 == 0 ? 0 : 1) + " M";
+      } else if (num >= 10000) {
+        // Miles (solo desde 10.000)
+        final thousands = num / 1000;
+        return thousands.toStringAsFixed(thousands % 1 == 0 ? 0 : 1) + " K";
+      }
+      // Retornar formateado para números menores a 10.000
+      return _currencyFormat.format(amount);
+    } catch (e) {
+      return _montoController.text;
+    }
   }
 
   @override
@@ -123,48 +169,104 @@ class _MovementsState extends State<Movements> {
   }
 
   Widget _buildMoneyInput() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        TextWidget(
-          text: "\$ ",
-          size: 85,
-          color: _montoController.text.isEmpty
-              ? Colors.grey.shade400
-              : _activeColor,
-          fontWeight: FontWeight.bold,
-        ),
-        IntrinsicWidth(
-          child: TextField(
-            controller: _montoController,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            cursorColor: _activeColor,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 85,
-              fontWeight: FontWeight.w800,
-              color: _activeColor,
-              fontFamily: 'Poppins',
-              letterSpacing: -2,
-              height: 1.0,
-            ),
-            decoration: InputDecoration(
-              hintText: "0",
-              hintStyle: TextStyle(
-                color: _montoController.text.isEmpty
-                    ? Colors.grey.shade400
-                    : _activeColor.withOpacity(0.3),
+    // Calcular tamaño dinámico basado en cantidad de dígitos y estado de abreviación
+    final digitsCount =
+        _montoController.text.replaceAll(RegExp(r'[^0-9]'), '').length;
+
+    // Determinar si se debe abreviar
+    final shouldAbbreviate = digitsCount >= 5; // 10.000 = 5 dígitos
+
+    // Tamaño base según dígitos
+    double baseFontSize = (digitsCount > 10
+        ? 60.0
+        : digitsCount > 6
+            ? 68.0
+            : 80.0);
+
+    // Reducir tamaño si está abreviado
+    final displayFontSize = (_showAbbreviated && shouldAbbreviate)
+        ? baseFontSize * 0.7 // 70% del tamaño original (~56px para 80px base)
+        : baseFontSize;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: SizedBox(
+          width: double.infinity,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Símbolo $ con animación
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 400),
+                style: TextStyle(
+                  fontSize: displayFontSize,
+                  fontWeight: FontWeight.w700,
+                  color: _montoController.text.isEmpty
+                      ? Colors.grey.shade400
+                      : _activeColor,
+                  fontFamily: 'Poppins',
+                  letterSpacing: -0.5,
+                  height: 1.0,
+                ),
+                child: const Text("\$"),
               ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
+              const SizedBox(width: 12),
+              // Campo de edición elegante con animación
+              Expanded(
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 400),
+                  style: TextStyle(
+                    fontSize: displayFontSize,
+                    fontWeight: FontWeight.w700,
+                    color: _montoController.text.isEmpty
+                        ? Colors.grey.shade400
+                        : _activeColor,
+                    fontFamily: 'Poppins',
+                    letterSpacing: -0.5,
+                    height: 1.0,
+                  ),
+                  child: TextField(
+                    controller: _montoController,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    cursorColor: _activeColor,
+                    cursorWidth: 2.5,
+                    textAlign: TextAlign.center,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: InputDecoration(
+                      hintText: "0",
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade300,
+                        fontSize: displayFontSize,
+                        fontWeight: FontWeight.w400,
+                        fontFamily: 'Poppins',
+                        letterSpacing: -0.5,
+                        height: 1.0,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      isCollapsed: true,
+                    ),
+                    onTap: () {
+                      // Al tocar, cancelar abreviación para mostrar número completo
+                      _abbreviationTimer?.cancel();
+                      setState(() => _showAbbreviated = false);
+                    },
+                    onChanged: (value) {
+                      // Aplicar formateo y mostrar abreviación después de 2 segundos
+                      _formatCurrency();
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -527,8 +629,8 @@ class _MovementsState extends State<Movements> {
 
     HapticFeedback.lightImpact();
 
-    double val =
-        double.tryParse(_montoController.text.replaceAll('.', '')) ?? 0.0;
+    final cleanedValue = _montoController.text.replaceAll('.', '');
+    double val = double.tryParse(cleanedValue) ?? 0.0;
 
     await _movementController.createMovement(
       type: _isGoalMode ? 'expense' : (_esGasto ? 'expense' : 'income'),
@@ -547,6 +649,7 @@ class _MovementsState extends State<Movements> {
 
   @override
   void dispose() {
+    _abbreviationTimer?.cancel();
     _montoController.dispose();
     _nombreController.dispose();
     _etiquetaController.dispose();
