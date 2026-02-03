@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../Theme/Theme.dart';
 
 class HeaderMonto extends StatelessWidget {
   final TextEditingController controller;
@@ -15,23 +16,23 @@ class HeaderMonto extends StatelessWidget {
     required this.onBackPressed,
   });
 
-  // Colores PASTEL para el fondo (No chillones)
+  // Colores PASTEL para el fondo (centralizados en AppTheme)
   Color get _backgroundColor {
     switch (mode) {
-      case 'expense': return const Color(0xFFFFF0F0); // Rojo pastel muy claro
-      case 'income': return const Color(0xFFF0FFF4); // Verde pastel muy claro
-      case 'goal': return const Color(0xFFF0F4FF);   // Azul pastel muy claro
-      default: return const Color(0xFFF0F0F0);
+      case 'expense': return AppTheme.pastelRed;
+      case 'income': return AppTheme.pastelGreen;
+      case 'goal': return AppTheme.pastelBlue;
+      default: return AppTheme.backgroundColor;
     }
   }
 
-  // Colores FUERTES para el texto
+  // Colores FUERTES para el texto (centralizados en AppTheme)
   Color get _accentColor {
     switch (mode) {
-      case 'expense': return const Color(0xFFFF5252);
-      case 'income': return const Color(0xFF4CAF50);
-      case 'goal': return const Color(0xFF536DFE);
-      default: return Colors.grey;
+      case 'expense': return AppTheme.expenseDarkColor;
+      case 'income': return AppTheme.goalGreen;
+      case 'goal': return AppTheme.goalBlue;
+      default: return AppTheme.greyColor;
     }
   }
 

@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 // TUS IMPORTS
 import 'package:MyPocket/Screens/service/calendario_page.dart';
 import 'package:MyPocket/Screens/service/savings_assistant_fixed.dart';
+import 'package:MyPocket/Screens/service/balance_detail_screen.dart';
 import 'package:MyPocket/Theme/theme.dart';
 import 'package:MyPocket/Widgets/common/text_widget.dart';
 import 'package:MyPocket/Widgets/home/principal_actions_widget.dart';
-import 'package:MyPocket/Screens/service/tax_assistant_screen.dart';
+import 'package:MyPocket/Screens/service/tax_screen.dart';
 import 'package:MyPocket/Controllers/home_controller.dart';
 import 'package:MyPocket/utils/helpers.dart';
 
@@ -154,7 +155,7 @@ class _HomeState extends State<Home> {
       ActionCardData(
           title: "Simulador de Tarifas",
           iconData: Icons.calculate_outlined,
-          onTap: () => navigateTo(const TaxAssistantScreen())),
+          onTap: () => navigateTo(const TaxScreen())),
       ActionCardData(
           title: "Calendario de Pagos",
           iconData: Icons.calendar_month,
@@ -214,90 +215,101 @@ class _HomeState extends State<Home> {
 
   // --- TARJETA DE BALANCE ---
   Widget _buildBalanceCard() {
-    return Container(
-      width: MediaQuery.of(context).size.width,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            height: 150,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4))
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextWidget(
-                            text: 'Balance',
-                            color: AppTheme.primaryColor,
-                            size: 20,
-                            fontWeight: FontWeight.w500),
-                        TextWidget(
-                            text: 'Conoce tu saldo',
-                            color: AppTheme.greyColor,
-                            size: 15),
-                      ],
-                    ),
-                    const Icon(Icons.arrow_forward_ios_rounded),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextWidget(
-                    text: 'Tu saldo actual es',
-                    color: AppTheme.greyColor,
-                    size: 15),
-                _homeController.isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : TextWidget(
-                        text: formatCurrency(_homeController.balance),
-                        color: Colors.black,
-                        size: 20),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: -25,
-            left: 30,
-            right: 30,
-            child: Container(
-              height: 40,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BalanceDetailScreen()),
+        ).then((_) {
+          // Recargar datos al volver
+          _loadHomeData();
+        });
+      },
+      child: Container(
+        width: MediaQuery.of(context).size.width,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 150,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor,
-                borderRadius: BorderRadius.circular(30),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
                       color: Colors.black.withOpacity(0.1),
                       blurRadius: 10,
-                      offset: const Offset(0, 2))
+                      offset: const Offset(0, 4))
                 ],
               ),
-              child: const Center(
-                  child: TextWidget(
-                      text: 'Conoce más de tus finanzas',
-                      color: Colors.white,
-                      size: 16,
-                      fontWeight: FontWeight.w500)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextWidget(
+                              text: 'Balance',
+                              color: AppTheme.primaryColor,
+                              size: 20,
+                              fontWeight: FontWeight.w500),
+                          TextWidget(
+                              text: 'Conoce tu saldo',
+                              color: AppTheme.greyColor,
+                              size: 15),
+                        ],
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextWidget(
+                      text: 'Tu saldo actual es',
+                      color: AppTheme.greyColor,
+                      size: 15),
+                  _homeController.isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : TextWidget(
+                          text: formatCurrency(_homeController.balance),
+                          color: Colors.black,
+                          size: 20),
+                ],
+              ),
             ),
-          ),
-        ],
+            Positioned(
+              bottom: -25,
+              left: 30,
+              right: 30,
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2))
+                  ],
+                ),
+                child: const Center(
+                    child: TextWidget(
+                        text: 'Conoce más de tus finanzas',
+                        color: Colors.white,
+                        size: 16,
+                        fontWeight: FontWeight.w500)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

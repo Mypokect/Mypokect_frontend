@@ -24,6 +24,7 @@ class _GoalsScreenState extends State<GoalsScreen>
       'emoji': '✈️',
       'icon': Icons.flight,
       'color': const Color(0xFF2196F3),
+      
       'currentAmount': 3500000,
       'targetAmount': 8000000,
     },

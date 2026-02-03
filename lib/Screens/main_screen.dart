@@ -5,7 +5,7 @@ import 'package:MyPocket/Screens/goals_screen.dart';
 import 'package:MyPocket/Screens/home.dart';
 import 'package:MyPocket/Screens/movements.dart';
 import 'package:MyPocket/Screens/service/budgets_list_screen.dart';
-import 'package:MyPocket/Screens/service/saving_goals_screen.dart';
+import 'package:MyPocket/Screens/service/savings_goals_screen_new.dart';
 import 'package:MyPocket/Theme/theme.dart';
 
 class MainScreen extends StatefulWidget {
@@ -25,7 +25,7 @@ class _MainScreenState extends State<MainScreen> {
       const Home(),
       const BudgetsListScreen(),
       Container(),
-      const SavingGoalsScreen(),
+      const SavingsGoalsScreenNew(),
       Container(),
     ];
 

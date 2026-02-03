@@ -56,12 +56,27 @@ class MovementApi {
         body: jsonEncode({'transcripcion': transcription}),
       );
 
+      print('🔵 procesarVoz status: ${response.statusCode}');
+      print('🔵 procesarVoz body: ${response.body}');
+
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        // Retornamos el mapa interno de sugerencia
-        return json['movement_suggestion'] ?? json['data'];
+        final data = json['data'];
+        print('🔵 procesarVoz data: $data');
+        if (data is Map) {
+          final suggestion = data['movement_suggestion'] ?? data;
+          print('🔵 procesarVoz suggestion: $suggestion');
+          return Map<String, dynamic>.from(suggestion);
+        }
+        return json['movement_suggestion'] != null
+            ? Map<String, dynamic>.from(json['movement_suggestion'])
+            : null;
+      } else {
+        print('🔴 procesarVoz error status: ${response.statusCode}');
       }
-    } catch (e) {}
+    } catch (e) {
+      print("DEBUG: Error procesarVoz: $e");
+    }
     return null;
   }
 
@@ -73,12 +88,12 @@ class MovementApi {
       final response = await http.post(
         url,
         headers: await _getHeaders(),
-        body: jsonEncode({'name_tag': name}),
+        body: jsonEncode({'name': name}),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final json = jsonDecode(response.body);
-        return json['tag']?['name_tag'] ?? name;
+        return json['data']?['name'] ?? name;
       }
     } catch (e) {}
     return null;
@@ -94,7 +109,7 @@ class MovementApi {
         final json = jsonDecode(response.body);
         // Laravel: { status: success, data: [...] }
         final List list = json['data'] ?? json['tags'] ?? [];
-        return list.map<String>((e) => e['name_tag'].toString()).toList();
+        return list.map<String>((e) => (e['name'] ?? e['name_tag'] ?? '').toString()).toList();
       }
     } catch (_) {}
     return [];

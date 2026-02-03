@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:avatar_glow/avatar_glow.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import '../Widgets/common/text_widget.dart';
 import '../Widgets/movements/campo_etiquetas.dart';
+import '../Widgets/movements/sound_wave_animation.dart';
+import '../Widgets/movements/tag_chip_selector.dart';
+import '../Widgets/movements/type_selector.dart';
 import '../Controllers/movement_controller.dart';
+import '../api/goal_contributions_api.dart';
+import '../api/savings_goals_api.dart';
 import '../Theme/Theme.dart';
+import 'main_screen.dart';
+
+enum VoiceState { idle, listening, processing, success, error }
 
 class Movements extends StatefulWidget {
   final String? preSelectedTag;
@@ -34,40 +41,119 @@ class _MovementsState extends State<Movements> {
   bool _isGoalMode = false;
   bool _hasInvoice = false;
   List<String> _etiquetasUsuario = [];
+  List<String> _categorias = [];
+  List<String> _metas = [];
+  String? _selectedTag;
   final SpeechToText _speechToText = SpeechToText();
   bool _showAbbreviated = false;
   Timer? _abbreviationTimer;
   Timer? _suggestionTimer;
   bool _isLoadingSuggestion = false;
   bool _autoSuggestEnabled = true;
+  bool _microphoneAvailable = false;
+  bool _isProcessingAI = false;
+  VoiceState _voiceState = VoiceState.idle;
+  Timer? _recordingTimer;
+  int _recordingSeconds = 0;
+  bool _showNewTagHint = false;
 
-  final Color _greenMyPocket = const Color(0xFF006B52);
-  final Color _redExpense = const Color(0xFFEF5350);
-  final Color _blueGoal = const Color(0xFF42A5F5);
+  // Usar colores del tema centralizado
+  Color get _greenMyPocket => AppTheme.primaryColor;
+  Color get _redExpense => AppTheme.expenseDarkColor;
+  Color get _blueGoal => AppTheme.goalBlue;
 
   Color get _activeColor =>
       _isGoalMode ? _blueGoal : (_esGasto ? _redExpense : _greenMyPocket);
+
+  // =====================================================
+  // HELPERS DE RESPONSIVIDAD
+  // =====================================================
+
+  double _screenWidth(BuildContext context) =>
+      MediaQuery.of(context).size.width;
+
+  double _responsivePadding(BuildContext context) {
+    final width = _screenWidth(context);
+    if (width < 360) return 16.0; // Pantallas muy pequeñas
+    if (width < 400) return 20.0; // Pantallas pequeñas (iPhone SE)
+    if (width < 600) return 24.0; // Pantallas medianas (mayoría)
+    return 32.0; // Tablets y grandes
+  }
+
+  double _responsiveSpacing(BuildContext context, double baseSpacing) {
+    final width = _screenWidth(context);
+    if (width < 360) return baseSpacing * 0.8;
+    if (width > 600) return baseSpacing * 1.2;
+    return baseSpacing;
+  }
+
+  // =====================================================
 
   @override
   void initState() {
     super.initState();
     _initLogic();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _reloadTags();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reloadTags();
+  }
+
+  @override
+  void didUpdateWidget(Movements oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.preSelectedTag != widget.preSelectedTag) {
+      _reloadTags();
+    }
   }
 
   void _initLogic() async {
-    await _speechToText.initialize();
+    // Inicializar micrófono UNA SOLA VEZ - sin callbacks que interfieran
+    _microphoneAvailable = await _speechToText.initialize();
+
     final tags = await _movementController.getAllEtiquetas();
-    if (mounted) setState(() => _etiquetasUsuario = tags);
+    if (mounted) {
+      // Separar categorías de metas
+      final categorias = tags
+          .where((tag) =>
+              !tag.startsWith('💰') &&
+              !tag.toLowerCase().contains('meta:') &&
+              !_isTagFromGoals(tag))
+          .toList();
+
+      final metas = tags
+          .where((tag) =>
+              tag.startsWith('💰') ||
+              tag.toLowerCase().contains('meta:') ||
+              _isTagFromGoals(tag))
+          .toList();
+
+      setState(() {
+        _etiquetasUsuario = tags;
+        _categorias = categorias;
+        _metas = metas;
+      });
+    }
 
     if (widget.preSelectedTag != null) {
       _etiquetaController.text = widget.preSelectedTag!;
-      _isGoalMode = true;
+      _selectedTag = widget.preSelectedTag;
+      _isGoalMode = _esEtiquetaMeta(widget.preSelectedTag!);
     }
     _montoController.addListener(_formatCurrency);
 
     // Listeners para sugerencia automática
     _nombreController.addListener(_onDescriptionOrAmountChanged);
     _montoController.addListener(_onDescriptionOrAmountChanged);
+
+    // Listener para sincronizar campo de etiqueta con chips
+    _etiquetaController.addListener(_onTagTextChanged);
 
     // Cargar preferencia de autosugestión
     await _loadAutoSuggestPreference();
@@ -80,6 +166,45 @@ class _MovementsState extends State<Movements> {
         _autoSuggestEnabled = prefs.getBool('auto_suggest_tags') ?? true;
       });
     }
+  }
+
+  /// Recargar etiquetas desde el servidor (útil después de crear/eliminar metas)
+  Future<void> _reloadTags() async {
+    try {
+      final tags = await _movementController.getAllEtiquetas();
+      if (mounted) {
+        final categorias = tags
+            .where((tag) =>
+                !tag.startsWith('💰') &&
+                !tag.toLowerCase().contains('meta:') &&
+                !_isTagFromGoals(tag))
+            .toList();
+
+        final metas = tags
+            .where((tag) =>
+                tag.startsWith('💰') ||
+                tag.toLowerCase().contains('meta:') ||
+                _isTagFromGoals(tag))
+            .toList();
+
+        setState(() {
+          _etiquetasUsuario = tags;
+          _categorias = categorias;
+          _metas = metas;
+        });
+      }
+    } catch (e) {
+      // Error silencioso
+    }
+  }
+
+  /// Detectar si un tag viene de la API de metas
+  bool _isTagFromGoals(String tag) {
+    if (tag.isEmpty) return false;
+    final parts = tag.split(' ');
+    if (parts.length < 2) return false;
+    final firstPart = parts.first;
+    return firstPart.runes.length <= 4;
   }
 
   void _formatCurrency() {
@@ -194,42 +319,97 @@ class _MovementsState extends State<Movements> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.transparent,
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded, color: Colors.black26),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            // Siempre regresar al home actualizado
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const MainScreen()),
+              (route) => false,
+            );
+          },
         ),
-        title: TextWidget(
-          text: _isGoalMode ? "NUEVO ABONO" : "REGISTRO",
-          size: 13,
-          fontWeight: FontWeight.w800,
-          color: Colors.grey.shade400,
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: TextWidget(
+            key: ValueKey(_isGoalMode),
+            text: _isGoalMode ? "NUEVO ABONO" : "REGISTRO",
+            size: 13,
+            fontWeight: FontWeight.w800,
+            color: _isGoalMode ? _blueGoal : Colors.grey.shade400,
+          ),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 20),
-                  _buildMoneyInput(),
-                  const SizedBox(height: 30),
-                  _buildDescriptionInput(),
-                  const SizedBox(height: 25),
-                  if (!_isGoalMode) _buildTypeAndCategoryRow(),
-                  const SizedBox(height: 20),
-                  _buildInvoiceToggle(),
-                  const SizedBox(height: 30),
-                  _buildPaymentMethodInput(),
-                  const SizedBox(height: 40),
-                ],
+          // Main content
+          Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _responsivePadding(context),
+                  ),
+                  child: Column(
+                    children: [
+                      SizedBox(height: _responsiveSpacing(context, 20)),
+                      _buildMoneyInput(),
+                      SizedBox(height: _responsiveSpacing(context, 30)),
+                      _buildDescriptionInput(),
+                      SizedBox(height: _responsiveSpacing(context, 25)),
+                      _buildTypeAndCategoryRow(),
+                      SizedBox(height: _responsiveSpacing(context, 16)),
+                      if (!_isGoalMode) _buildInvoiceToggle(),
+                      SizedBox(height: _responsiveSpacing(context, 24)),
+                      if (!_isGoalMode) _buildPaymentMethodInput(),
+                      SizedBox(height: _responsiveSpacing(context, 40)),
+                    ],
+                  ),
+                ),
+              ),
+              _buildFooterActions(),
+            ],
+          ),
+
+          // Processing overlay
+          if (_isProcessingAI)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 3,
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        '🤖 Procesando con IA...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'Baloo2',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Analizando tu voz',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontFamily: 'Baloo2',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-          _buildFooterActions(),
         ],
       ),
     );
@@ -375,133 +555,153 @@ class _MovementsState extends State<Movements> {
   }
 
   Widget _buildTypeAndCategoryRow() {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          flex: 4,
-          child: Container(
-            height: 48,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+        // 1. Sección CATEGORÍAS + METAS (2 secciones separadas)
+        TagChipSelector(
+          categorias: _categorias,
+          metas: _metas,
+          selectedTag: _selectedTag,
+          onTagSelected: _onTagSelected,
+          onTagDeselected: _onTagDeselected,
+          isGoalMode: _isGoalMode,
+          activeColor: _activeColor,
+        ),
+
+        SizedBox(height: _responsiveSpacing(context, 12)),
+
+        // 2. Campo de texto + botón sugerencia + Toggle (MISMA FILA)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 2A. Campo texto + botón sugerencia (Expanded - toma espacio disponible)
+            Expanded(
               child: Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => _esGasto = true);
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _esGasto
-                              ? const Color(0xFFE57373)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Center(
-                          child: TextWidget(
-                            text: "GASTO",
-                            size: 13,
-                            fontWeight: FontWeight.w800,
-                            color: _esGasto ? Colors.white : Colors.black54,
-                          ),
-                        ),
+                    child: SizedBox(
+                      height: 48,
+                      child: CampoEtiquetas(
+                        etiquetaController: _etiquetaController,
+                        etiquetasUsuario: _etiquetasUsuario,
+                        isLoadingSuggestion: _isLoadingSuggestion,
+                        onEtiquetaSeleccionada: _onTagSelected,
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        setState(() => _esGasto = false);
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: !_esGasto
-                              ? const Color(0xFF4DB6AC)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Center(
-                          child: TextWidget(
-                            text: "INGRESO",
-                            size: 13,
-                            fontWeight: FontWeight.w800,
-                            color: !_esGasto ? Colors.white : Colors.black54,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(width: 8),
+                  _buildSuggestionButton(),
                 ],
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 6,
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 48,
-                  child: CampoEtiquetas(
-                    etiquetaController: _etiquetaController,
-                    etiquetasUsuario: _etiquetasUsuario,
-                    isLoadingSuggestion: _isLoadingSuggestion,
-                    onEtiquetaSeleccionada: (tag) =>
-                        setState(() => _etiquetaController.text = tag),
-                  ),
+
+            // Spacing entre campo y toggle
+            SizedBox(width: _responsiveSpacing(context, 10)),
+
+            // 2B. Toggle Gasto/Ingreso (Fixed width - OCULTO en modo meta)
+            if (!_isGoalMode)
+              SizedBox(
+                width: _toggleWidth(context),
+                child: TypeSelector(
+                  esGasto: _esGasto,
+                  isGoalMode: _isGoalMode,
+                  colorActive: _esGasto ? _redExpense : _greenMyPocket,
+                  onTap: () {
+                    setState(() => _esGasto = !_esGasto);
+                  },
                 ),
               ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _isLoadingSuggestion ? null : _sugerirEtiqueta,
-                child: Container(
-                  height: 48,
-                  width: 48,
-                  decoration: BoxDecoration(
-                    color: _isLoadingSuggestion
-                        ? Colors.grey.shade300
-                        : AppTheme.primaryColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
-                      width: 1.5,
+          ],
+        ),
+
+        // 3. Banner "Nueva etiqueta" (si aplica)
+        if (_showNewTagHint) ...[
+          SizedBox(height: _responsiveSpacing(context, 8)),
+          _buildNewTagBanner(),
+        ],
+      ],
+    );
+  }
+
+  // Helper para ancho responsive del toggle
+  double _toggleWidth(BuildContext context) {
+    final width = _screenWidth(context);
+    if (width < 360) return 120.0;
+    if (width > 600) return 180.0;
+    return 140.0;
+  }
+
+  Widget _buildSuggestionButton() {
+    return GestureDetector(
+      onTap: _isLoadingSuggestion ? null : _sugerirEtiqueta,
+      child: Container(
+        height: 48,
+        width: 48,
+        decoration: BoxDecoration(
+          color: _isLoadingSuggestion
+              ? Colors.grey.shade300
+              : AppTheme.primaryColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppTheme.primaryColor.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: _isLoadingSuggestion
+            ? Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor,
                     ),
                   ),
-                  child: _isLoadingSuggestion
-                      ? Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                AppTheme.primaryColor,
-                              ),
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.lightbulb_outline_rounded,
-                          color: AppTheme.primaryColor,
-                          size: 22,
-                        ),
                 ),
+              )
+            : Icon(
+                Icons.lightbulb_outline_rounded,
+                color: AppTheme.primaryColor,
+                size: 22,
               ),
-            ],
-          ),
+      ),
+    );
+  }
+
+  Widget _buildNewTagBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.blue.shade200,
+          width: 1,
         ),
-      ],
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            size: 16,
+            color: Colors.blue.shade700,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '"${_etiquetaController.text}" se creará como nueva etiqueta al guardar',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.blue.shade700,
+                fontFamily: 'Baloo2',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -663,11 +863,42 @@ class _MovementsState extends State<Movements> {
 
   Widget _buildFooterActions() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 45),
+      padding: EdgeInsets.fromLTRB(
+        _responsivePadding(context),
+        0,
+        _responsivePadding(context),
+        _responsiveSpacing(context, 45),
+      ),
       color: Colors.white,
       child: Row(
         children: [
           _buildMicButton(),
+
+          // Botón de cancelar (solo visible cuando está grabando)
+          if (_voiceState == VoiceState.listening) ...[
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: _cancelVoice,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.red.shade200,
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  color: Colors.red.shade600,
+                  size: 24,
+                ),
+              ),
+            ),
+          ],
+
           const SizedBox(width: 18),
           Expanded(child: _buildSaveButton()),
         ],
@@ -676,46 +907,152 @@ class _MovementsState extends State<Movements> {
   }
 
   Widget _buildMicButton() {
-    return GestureDetector(
-      onTap: _toggleVoice, // Nuevo: tap para iniciar/detener
-      onLongPress: _startVoice,
-      onLongPressUp: _stopVoice,
-      child: AvatarGlow(
-        animate: _isListening,
-        glowColor: _activeColor,
-        duration: const Duration(milliseconds: 1500),
-        repeat: true,
-        curve: Curves.easeInOutSine,
-        child: Container(
-          width: 62,
-          height: 62,
-          decoration: BoxDecoration(
-            color: _isListening
-                ? _activeColor.withOpacity(0.1)
-                : Colors.grey.shade50,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color:
-                  _isListening ? _activeColor : Colors.black.withOpacity(0.05),
-              width: _isListening ? 2 : 1,
+    // Si el micrófono no está disponible, mostrar botón deshabilitado
+    if (!_microphoneAvailable) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: 0.4,
+            child: GestureDetector(
+              onTap: _startVoice, // Muestra el diálogo explicativo
+              child: Container(
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.grey.shade300,
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  Icons.mic_off_rounded,
+                  color: Colors.grey.shade400,
+                  size: 28,
+                ),
+              ),
             ),
-            boxShadow: _isListening
-                ? [
-                    BoxShadow(
-                      color: _activeColor.withOpacity(0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    )
-                  ]
-                : null,
           ),
-          child: Icon(
-            _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-            color: _isListening ? _activeColor : _activeColor.withOpacity(0.6),
-            size: 28,
+        ],
+      );
+    }
+
+    // Obtener color según estado
+    Color buttonColor;
+    IconData buttonIcon;
+    Color iconColor;
+
+    switch (_voiceState) {
+      case VoiceState.idle:
+        buttonColor = Colors.grey.shade50;
+        buttonIcon = Icons.mic_none_rounded;
+        iconColor = _activeColor.withOpacity(0.6);
+        break;
+      case VoiceState.listening:
+        buttonColor = _activeColor.withOpacity(0.1);
+        buttonIcon = Icons.mic_rounded;
+        iconColor = _activeColor;
+        break;
+      case VoiceState.processing:
+        buttonColor = Colors.blue.shade50;
+        buttonIcon = Icons.mic_rounded;
+        iconColor = Colors.blue;
+        break;
+      case VoiceState.success:
+        buttonColor = Colors.green.shade50;
+        buttonIcon = Icons.check_circle_rounded;
+        iconColor = Colors.green;
+        break;
+      case VoiceState.error:
+        buttonColor = Colors.red.shade50;
+        buttonIcon = Icons.error_rounded;
+        iconColor = Colors.red;
+        break;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: _voiceState == VoiceState.idle ||
+                  _voiceState == VoiceState.listening
+              ? _toggleVoice
+              : null,
+          onLongPress: _voiceState == VoiceState.idle ? _startVoice : null,
+          onLongPressUp: _isListening ? _stopVoice : null,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Animación de ondas solo cuando está escuchando
+              if (_voiceState == VoiceState.listening)
+                SoundWaveAnimation(
+                  color: _activeColor,
+                  size: 62,
+                ),
+
+              // Botón principal con animación
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  color: buttonColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: _voiceState == VoiceState.listening
+                        ? _activeColor
+                        : Colors.black.withOpacity(0.05),
+                    width: _voiceState == VoiceState.listening ? 2 : 1,
+                  ),
+                  boxShadow: _voiceState == VoiceState.listening
+                      ? [
+                          BoxShadow(
+                            color: _activeColor.withOpacity(0.3),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          )
+                        ]
+                      : null,
+                ),
+                child: _voiceState == VoiceState.processing
+                    ? Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(iconColor),
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        buttonIcon,
+                        color: iconColor,
+                        size: 28,
+                      ),
+              ),
+            ],
           ),
         ),
-      ),
+
+        // Contador de duración (solo visible cuando está grabando)
+        if (_voiceState == VoiceState.listening)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '${_recordingSeconds ~/ 60}:${(_recordingSeconds % 60).toString().padLeft(2, '0')}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _activeColor,
+                fontFamily: 'Baloo2',
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -753,6 +1090,120 @@ class _MovementsState extends State<Movements> {
     );
   }
 
+  // Métodos para manejo de etiquetas
+  bool _esEtiquetaMeta(String tag) {
+    if (_metas.contains(tag)) return true;
+    return tag.startsWith('💰') || tag.toLowerCase().contains('meta:');
+  }
+
+  void _onTagSelected(String tag) {
+    setState(() {
+      _selectedTag = tag;
+      _etiquetaController.text = tag;
+
+      // Detectar si es meta
+      bool esMeta = _esEtiquetaMeta(tag);
+
+      if (esMeta != _isGoalMode) {
+        _isGoalMode = esMeta;
+        HapticFeedback.mediumImpact();
+      }
+    });
+  }
+
+  void _onTagDeselected() {
+    setState(() {
+      _selectedTag = null;
+      _etiquetaController.clear();
+
+      // Volver a modo normal si estaba en modo meta
+      if (_isGoalMode) {
+        _isGoalMode = false;
+        HapticFeedback.lightImpact();
+      }
+    });
+  }
+
+  // Verificar si hay alta coincidencia entre texto escrito y etiqueta
+  bool _tieneAltaCoincidencia(String textoEscrito, String etiqueta) {
+    final texto = textoEscrito.toLowerCase();
+    final tag = etiqueta.toLowerCase();
+
+    // Coincidencia exacta
+    if (texto == tag) return true;
+
+    // Empieza con + mínimo 3 caracteres (ignorando emojis)
+    // Extraer solo letras para el conteo
+    final textoSinEmoji = texto.replaceAll(RegExp(r'[^\w\s]'), '').trim();
+    if (tag.startsWith(texto) && textoSinEmoji.length >= 3) return true;
+
+    return false;
+  }
+
+  // Listener para sincronizar campo de texto con chips
+  void _onTagTextChanged() {
+    final currentText = _etiquetaController.text.trim();
+
+    // CASO 1: Campo vacío
+    if (currentText.isEmpty) {
+      if (_selectedTag != null || _showNewTagHint) {
+        setState(() {
+          _selectedTag = null;
+          _showNewTagHint = false;
+
+          if (_isGoalMode) {
+            _isGoalMode = false;
+            HapticFeedback.lightImpact();
+          }
+        });
+      }
+      return;
+    }
+
+    // CASO 2: Buscar coincidencia
+    String? matchedTag;
+
+    for (final tag in _etiquetasUsuario) {
+      if (_tieneAltaCoincidencia(currentText, tag)) {
+        matchedTag = tag;
+        break;
+      }
+    }
+
+    // CASO 2A: Encontró coincidencia
+    if (matchedTag != null) {
+      bool esMeta = _esEtiquetaMeta(matchedTag);
+
+      if (_selectedTag != matchedTag ||
+          _isGoalMode != esMeta ||
+          _showNewTagHint) {
+        setState(() {
+          _selectedTag = matchedTag;
+          _showNewTagHint = false;
+
+          if (_isGoalMode != esMeta) {
+            _isGoalMode = esMeta;
+            HapticFeedback.mediumImpact();
+          }
+        });
+      }
+    }
+    // CASO 2B: No hay coincidencia (texto nuevo)
+    else {
+      if (_selectedTag != null || !_showNewTagHint) {
+        setState(() {
+          _selectedTag = null;
+          _showNewTagHint = true;
+
+          if (_isGoalMode) {
+            _isGoalMode = false;
+            HapticFeedback.lightImpact();
+          }
+        });
+      }
+    }
+  }
+
   void _toggleVoice() {
     if (_isListening) {
       _stopVoice();
@@ -761,100 +1212,317 @@ class _MovementsState extends State<Movements> {
     }
   }
 
+  void _cancelVoice() async {
+    await _speechToText.stop();
+    HapticFeedback.lightImpact();
+
+    // Detener el contador de duración
+    _recordingTimer?.cancel();
+
+    setState(() {
+      _isListening = false;
+      _voiceState = VoiceState.idle;
+      _nombreController.clear();
+      _recordingSeconds = 0;
+    });
+  }
+
   void _startVoice() async {
     HapticFeedback.heavyImpact();
 
-    // Verificar disponibilidad del micrófono
-    bool available = await _speechToText.initialize(
-      onError: (error) {
+    // speech_to_text maneja los permisos automáticamente durante initialize()
+    print('🔐 Inicializando sistema de reconocimiento de voz...');
+
+    // Si no está disponible, inicializar (esto solicita permisos automáticamente)
+    if (!_microphoneAvailable) {
+      print('❌ Micrófono no disponible - inicializando...');
+      _microphoneAvailable = await _speechToText.initialize();
+
+      if (!_microphoneAvailable) {
+        print('❌ No se pudo inicializar el micrófono');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error de micrófono: ${error.errorMsg}'),
-              backgroundColor: Colors.red,
+          // Mostrar mensaje más claro explicando el problema
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Reconocimiento de voz no disponible'),
+              content: const Text(
+                'El reconocimiento de voz no está disponible en este dispositivo/simulador.\n\n'
+                'Para usar esta función:\n'
+                '• En dispositivos reales: verifica los permisos de micrófono\n'
+                '• En simuladores iOS: usa un dispositivo real o emulador Android\n\n'
+                'Puedes continuar ingresando los datos manualmente.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Entendido'),
+                ),
+              ],
             ),
           );
         }
-      },
-      onStatus: (status) {
-        print('Estado del micrófono: $status');
-      },
-    );
-
-    if (!available) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('El micrófono no está disponible'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        return;
       }
-      return;
+      print('✅ Micrófono inicializado correctamente');
     }
 
-    setState(() => _isListening = true);
+    // Si ya está escuchando, detener primero
+    if (_speechToText.isListening) {
+      print('🎤 El micrófono ya está escuchando, deteniendo primero...');
+      await _speechToText.stop();
+      await Future.delayed(const Duration(milliseconds: 1000));
+    }
 
-    await _speechToText.listen(
-      onResult: (res) {
+    // 5. Limpiar todos los campos antes de iniciar nueva grabación
+    if (mounted) {
+      setState(() {
+        _isListening = true;
+        _voiceState = VoiceState.listening;
+        _recordingSeconds = 0;
+
+        // Limpiar campos previos para nueva consulta
+        _nombreController.clear();
+        _montoController.clear();
+        _etiquetaController.clear();
+        _hasInvoice = false;
+        _paymentMethod = 'digital';
+      });
+    }
+
+    // 6. Iniciar contador de duración
+    _recordingTimer?.cancel();
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _recordingSeconds++;
+        });
+      }
+    });
+
+    try {
+      print('🎤 Iniciando escucha del micrófono...');
+
+      // Obtener locales disponibles y seleccionar español
+      final locales = await _speechToText.locales();
+      String? spanishLocale;
+
+      // Buscar el mejor locale español disponible
+      for (final locale in locales) {
+        if (locale.localeId.startsWith('es-')) {
+          spanishLocale = locale.localeId;
+          print('✅ Usando locale español: $spanishLocale');
+          break;
+        }
+      }
+
+      // Si no encuentra español específico, intentar con el sistema
+      if (spanishLocale == null) {
+        print('⚠️ No se encontró locale español específico, usando locale del sistema');
+      }
+
+      // Configuración con locale español
+      await _speechToText.listen(
+        onResult: (res) {
+          print('📝 Transcripción: ${res.recognizedWords} (final: ${res.finalResult})');
+          if (mounted) {
+            setState(() {
+              _nombreController.text = res.recognizedWords;
+            });
+
+            // Cuando la transcripción es final, procesar automáticamente
+            if (res.finalResult && res.recognizedWords.isNotEmpty && _isListening) {
+              print('🔄 Transcripción final detectada, procesando...');
+              _stopVoice();
+            }
+          }
+        },
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 5),
+        localeId: spanishLocale, // Usar español explícitamente
+        onSoundLevelChange: (level) {
+          if (level > 0.5) {
+            print('🔊 Nivel: $level');
+          }
+        },
+      );
+
+      // Esperar para que el micrófono inicie
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Verificar si el micrófono está realmente escuchando
+      if (_speechToText.isListening) {
+        print('✅ Micrófono iniciado correctamente');
+      } else {
+        print('❌ El micrófono no pudo iniciar');
         if (mounted) {
           setState(() {
-            _nombreController.text = res.recognizedWords;
+            _isListening = false;
+            _voiceState = VoiceState.error;
+          });
+          _recordingTimer?.cancel();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo iniciar el micrófono. Intenta de nuevo.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              setState(() {
+                _voiceState = VoiceState.idle;
+              });
+            }
           });
         }
-      },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 5),
-      partialResults: true,
-      localeId: 'es_ES',
-      cancelOnError: true,
-    );
+      }
+    } catch (e) {
+      print('❌ Error al iniciar micrófono: $e');
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _voiceState = VoiceState.error;
+        });
+        _recordingTimer?.cancel();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _voiceState = VoiceState.idle;
+            });
+          }
+        });
+      }
+    }
   }
 
   void _stopVoice() async {
+    // Evitar llamadas duplicadas
+    if (!_isListening) return;
+
+    print('🛑 _stopVoice() llamado');
+    _isListening = false;
+
     await _speechToText.stop();
     HapticFeedback.mediumImpact();
-    setState(() => _isListening = false);
+
+    // Detener el contador de duración
+    _recordingTimer?.cancel();
+
+    setState(() {
+      _voiceState = VoiceState.processing;
+    });
 
     // Procesar transcripción con IA
     if (_nombreController.text.isNotEmpty) {
-      _procesarVozConIA();
+      print('🤖 Enviando a IA: "${_nombreController.text}"');
+      await _procesarVozConIA();
+    } else {
+      // Si no hay transcripción, volver a idle
+      setState(() => _voiceState = VoiceState.idle);
     }
   }
 
-  void _procesarVozConIA() async {
-    final sugerencia = await _movementController.procesarSugerenciaPorVoz(
-      transcripcion: _nombreController.text,
-      context: context,
-    );
+  Future<void> _procesarVozConIA() async {
+    print('🤖 _procesarVozConIA() iniciado');
+    setState(() => _isProcessingAI = true);
 
-    if (sugerencia != null && mounted) {
-      setState(() {
-        // Descripción limpia
-        _nombreController.text =
-            sugerencia['description'] ?? _nombreController.text;
+    try {
+      print('🤖 Llamando API con: "${_nombreController.text}"');
+      final sugerencia = await _movementController.procesarSugerenciaPorVoz(
+        transcripcion: _nombreController.text,
+        context: context,
+      );
+      print('🤖 Respuesta IA: $sugerencia');
 
-        // Monto (extraído por IA)
-        final amountStr = sugerencia['amount']?.toString() ?? '';
-        if (amountStr.isNotEmpty && amountStr != '0') {
-          _montoController.text = amountStr;
+      if (sugerencia != null && mounted) {
+        setState(() {
+          // Descripción limpia
+          _nombreController.text =
+              sugerencia['description'] ?? _nombreController.text;
+
+          // Monto (extraído por IA)
+          final amountStr = sugerencia['amount']?.toString() ?? '';
+          if (amountStr.isNotEmpty && amountStr != '0') {
+            _montoController.text = amountStr;
+          }
+
+          // Etiqueta sugerida
+          final suggestedTag = sugerencia['suggested_tag'] ?? '';
+          if (suggestedTag.isNotEmpty) {
+            _etiquetaController.text = suggestedTag;
+            _selectedTag = suggestedTag; // Sincronizar con chips
+          }
+
+          // Tipo (gasto/ingreso)
+          _esGasto = sugerencia['type'] == 'expense';
+
+          // Método de pago
+          _paymentMethod = sugerencia['payment_method'] ?? 'digital';
+
+          // Factura
+          _hasInvoice = sugerencia['has_invoice'] ?? false;
+
+          // Modo meta (detectar por etiqueta)
+          _isGoalMode = _esEtiquetaMeta(_etiquetaController.text);
+
+          // Estado de éxito
+          _voiceState = VoiceState.success;
+          _isProcessingAI = false;
+        });
+
+        // Volver a idle después de 1 segundo
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) {
+            setState(() => _voiceState = VoiceState.idle);
+          }
+        });
+      } else {
+        // Error: no se pudo procesar
+        if (mounted) {
+          setState(() {
+            _voiceState = VoiceState.error;
+            _isProcessingAI = false;
+          });
+
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() => _voiceState = VoiceState.idle);
+            }
+          });
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _voiceState = VoiceState.error;
+          _isProcessingAI = false;
+        });
 
-        // Etiqueta sugerida
-        _etiquetaController.text = sugerencia['suggested_tag'] ?? '';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error procesando voz: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
 
-        // Tipo (gasto/ingreso)
-        _esGasto = sugerencia['type'] == 'expense';
-
-        // Método de pago
-        _paymentMethod = sugerencia['payment_method'] ?? 'digital';
-
-        // Factura
-        _hasInvoice = sugerencia['has_invoice'] ?? false;
-
-        // Modo meta
-        _isGoalMode = sugerencia['is_goal'] ?? false;
-      });
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() => _voiceState = VoiceState.idle);
+          }
+        });
+      }
     }
   }
 
@@ -869,13 +1537,78 @@ class _MovementsState extends State<Movements> {
     final cleanedValue = _montoController.text.replaceAll('.', '');
     double val = double.tryParse(cleanedValue) ?? 0.0;
 
-    // Verificar si la etiqueta existe, si no, crearla
-    String? finalTag = _etiquetaController.text.trim();
+    String finalTag = _etiquetaController.text.trim();
+
+    // ============================================================
+    // MODO META: Crear contribución en lugar de movimiento
+    // ============================================================
+    if (_isGoalMode && finalTag.isNotEmpty) {
+      try {
+        // Obtener el mapa de etiquetas → IDs de metas
+        final goalTagToIdMap = await _movementController.getGoalTagToIdMap();
+
+        // Buscar el ID de la meta correspondiente a esta etiqueta
+        final goalId = goalTagToIdMap[finalTag];
+
+        if (goalId == null) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No se encontró la meta correspondiente'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Crear la contribución
+        final contributionsApi = GoalContributionsApi();
+        await contributionsApi.createContribution(
+          goalId: goalId,
+          amount: val,
+          description: _nombreController.text.isEmpty
+              ? 'Abono a meta'
+              : _nombreController.text,
+        );
+
+        // Limpiar cache de metas para reflejar el nuevo progreso
+        SavingsGoalsApi.clearCache();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('¡Abono guardado exitosamente!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Regresar al home actualizado
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const MainScreen()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al guardar abono: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+      return;
+    }
+
+    // ============================================================
+    // MODO NORMAL: Crear movimiento (gasto/ingreso)
+    // ============================================================
 
     if (finalTag.isNotEmpty) {
       // Verificar si la etiqueta NO está en la lista actual
       final tagExists = _etiquetasUsuario
-          .any((tag) => tag.toLowerCase() == finalTag!.toLowerCase());
+          .any((tag) => tag.toLowerCase() == finalTag.toLowerCase());
 
       if (!tagExists) {
         // Crear la etiqueta en el backend
@@ -888,7 +1621,7 @@ class _MovementsState extends State<Movements> {
           finalTag = createdTag;
           // Agregar a la lista local para futuras referencias
           setState(() {
-            _etiquetasUsuario.add(finalTag!);
+            _etiquetasUsuario.add(finalTag);
           });
         }
       }
@@ -896,17 +1629,21 @@ class _MovementsState extends State<Movements> {
 
     // Guardar el movimiento con la etiqueta (existente o nueva)
     await _movementController.createMovement(
-      type: _isGoalMode ? 'expense' : (_esGasto ? 'expense' : 'income'),
+      type: _esGasto ? 'expense' : 'income',
       amount: val,
       description: _nombreController.text,
-      tag: finalTag,
+      tag: finalTag.isEmpty ? null : finalTag,
       paymentMethod: _paymentMethod,
       hasInvoice: _hasInvoice,
       context: context,
     );
 
     if (context.mounted) {
-      Navigator.pop(context);
+      // Regresar al home actualizado
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+        (route) => false,
+      );
     }
   }
 
@@ -914,6 +1651,13 @@ class _MovementsState extends State<Movements> {
   void dispose() {
     _abbreviationTimer?.cancel();
     _suggestionTimer?.cancel();
+    _recordingTimer?.cancel();
+
+    // Remover listeners antes de dispose
+    _nombreController.removeListener(_onDescriptionOrAmountChanged);
+    _montoController.removeListener(_onDescriptionOrAmountChanged);
+    _etiquetaController.removeListener(_onTagTextChanged);
+
     _montoController.dispose();
     _nombreController.dispose();
     _etiquetaController.dispose();

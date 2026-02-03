@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:MyPocket/api/tax_api.dart';
 import 'package:MyPocket/Theme/theme.dart';
-import 'package:MyPocket/Widgets/common/text_widget.dart';
-import 'package:MyPocket/Widgets/common/button_custom.dart';
-import 'package:MyPocket/utils/helpers.dart'; // Importamos el helper
+import 'package:MyPocket/utils/helpers.dart';
 
-class TaxRadarScreen extends StatefulWidget {
-  const TaxRadarScreen({super.key});
+/// Content widget for the tax radar (no Scaffold/AppBar)
+/// Used inside TaxScreen as a tab
+class TaxRadarContent extends StatefulWidget {
+  const TaxRadarContent({super.key});
+
   @override
-  State<TaxRadarScreen> createState() => _TaxRadarScreenState();
+  State<TaxRadarContent> createState() => _TaxRadarContentState();
 }
 
-class _TaxRadarScreenState extends State<TaxRadarScreen> {
+class _TaxRadarContentState extends State<TaxRadarContent> {
   final TaxApi _api = TaxApi();
   bool _loading = true;
   List<dynamic> _alerts = [];
@@ -26,12 +27,13 @@ class _TaxRadarScreenState extends State<TaxRadarScreen> {
   void _fetchAlerts() async {
     try {
       final res = await _api.getTaxAlerts();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _alerts = res['data'];
           _message = res['summary_message'];
           _loading = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
@@ -39,47 +41,28 @@ class _TaxRadarScreenState extends State<TaxRadarScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7FE),
-      appBar: AppBar(
-        title: const TextWidget(
-            text: "Radar de Topes 2026",
-            color: Colors.black,
-            size: 20,
-            fontWeight: FontWeight.bold),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
-            onPressed: () => Navigator.pop(context)),
-      ),
-      body: _loading
-          ? Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryColor))
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              physics: const BouncingScrollPhysics(),
-              children: [
-                _buildSummaryHeader(),
-                const SizedBox(height: 30),
-                const Text("Monitoreo en Tiempo Real",
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey)),
-                const SizedBox(height: 15),
-                if (_alerts.isEmpty)
-                  const Center(child: Text("Sin datos"))
-                else
-                  ..._alerts.map((a) => _buildDetailCard(a)),
-                const SizedBox(height: 30),
-                ButtonCustom(
-                    text: "Volver",
-                    onTap: () => Navigator.pop(context),
-                    color: AppTheme.primaryColor),
-              ],
-            ),
+    if (_loading) {
+      return Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 80),
+      physics: const BouncingScrollPhysics(),
+      children: [
+        _buildSummaryHeader(),
+        const SizedBox(height: 30),
+        const Text("Monitoreo en Tiempo Real",
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey)),
+        const SizedBox(height: 15),
+        if (_alerts.isEmpty)
+          const Center(child: Text("Sin datos"))
+        else
+          ..._alerts.map((a) => _buildDetailCard(a)),
+      ],
     );
   }
 
@@ -105,7 +88,7 @@ class _TaxRadarScreenState extends State<TaxRadarScreen> {
           gradient: LinearGradient(colors: [color1, color2]),
           boxShadow: [
             BoxShadow(
-                color: color1.withOpacity(0.4),
+                color: color1.withValues(alpha: 0.4),
                 blurRadius: 15,
                 offset: const Offset(0, 8))
           ]),
@@ -156,7 +139,8 @@ class _TaxRadarScreenState extends State<TaxRadarScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold, fontSize: 16))),
           Text("${pct.clamp(0, 999)}%",
-              style: TextStyle(color: barColor, fontWeight: FontWeight.bold))
+              style:
+                  TextStyle(color: barColor, fontWeight: FontWeight.bold))
         ]),
         const SizedBox(height: 15),
         ClipRRect(
@@ -175,7 +159,9 @@ class _TaxRadarScreenState extends State<TaxRadarScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: status == 'exceeded' ? Colors.red : Colors.black87))
+                    color: status == 'exceeded'
+                        ? Colors.red
+                        : Colors.black87))
           ]),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             const Text("Límite",

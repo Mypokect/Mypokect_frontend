@@ -70,6 +70,7 @@ class MovementController {
       }
       return null;
     } catch (e) {
+      print('❌ ERROR procesarSugerenciaPorVoz: $e');
       return null;
     }
   }
@@ -78,24 +79,34 @@ class MovementController {
   Future<List<String>> getEtiquetasUsuario() async {
     final tags = await _movementApi.getTags();
     final savingsGoals = await _getSavingsGoals();
-    
+
     return await TagHistoryManager.getAllTags(
       serverTags: tags,
       goalTags: savingsGoals,
     );
   }
-  
+
   // NUEVO: Obtener etiquetas completas (híbrido)
   Future<List<String>> getAllEtiquetas() async {
+    SavingsGoalsApi.clearCache();
+
     final serverTags = await _movementApi.getTags();
     final goals = await _getSavingsGoals();
-    
-    return await TagHistoryManager.getAllTags(
+
+    // DEBUG: Ver de dónde vienen las etiquetas
+    print('🔍 DEBUG getAllEtiquetas:');
+    print('  Server tags: $serverTags');
+    print('  Goal tags: $goals');
+
+    final allTags = await TagHistoryManager.getAllTags(
       serverTags: serverTags,
       goalTags: goals,
     );
+
+    print('  Combined tags: $allTags');
+    return allTags;
   }
-  
+
   // NUEVO: Agregar uso de etiqueta al historial
   Future<void> recordTagUsage(String tag) async {
     await TagHistoryManager.recordUsage(tag);
@@ -107,21 +118,34 @@ class MovementController {
       final savingsApi = SavingsGoalsApi();
       final goals = await savingsApi.getGoals();
 
-      // Convertir metas a formato de etiqueta: "💰 Meta: nombre"
+      // Usar el tag directamente del backend (ya viene con formato correcto)
       final goalTags = goals.map((goal) {
-        // Extraer el nombre del goal (quitar "Meta:" si ya existe)
-        String goalName = goal.name;
-        if (goalName.toLowerCase().contains('meta:')) {
-          goalName = goalName.split(':').last.trim();
-        }
-
-        return '${goal.emoji} Meta: $goalName';
+        return goal.tag;
       }).toList();
 
       return goalTags;
     } catch (e) {
       print("Error loading savings goals for tags: $e");
       return [];
+    }
+  }
+
+  // NUEVO: Obtener mapa de etiquetas de metas a IDs
+  // Retorna Map<String, String> donde la key es el tag y el value es el goalId
+  Future<Map<String, String>> getGoalTagToIdMap() async {
+    try {
+      final savingsApi = SavingsGoalsApi();
+      final goals = await savingsApi.getGoals();
+
+      final Map<String, String> tagToIdMap = {};
+      for (final goal in goals) {
+        tagToIdMap[goal.tag] = goal.id;
+      }
+
+      return tagToIdMap;
+    } catch (e) {
+      print("Error loading goals map: $e");
+      return {};
     }
   }
 

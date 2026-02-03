@@ -33,15 +33,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   final BudgetApi _budgetApi = BudgetApi();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
-  static const List<Color> _categoryColors = [
-    Color(0xFF4E9F3D),
-    Color(0xFFD83A56),
-    Color(0xFFFF8E00),
-    Color(0xFF27496D),
-    Color(0xFF9A0680),
-    Color(0xFF00ADB5),
-    Color(0xFFFFC75F),
-  ];
+  // Usar colores de categoría centralizados en AppTheme
 
   String _mode = 'manual';
   bool _isLoading = false;
@@ -411,8 +403,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     .map((entry) => CategoryCardWidget(
                         name: entry.value['name'],
                         amount: entry.value['amount'],
-                        color:
-                            _categoryColors[entry.key % _categoryColors.length],
+                        color: AppTheme.getCategoryColor(entry.key),
                         isEditing: _editingIndex == entry.key,
                         readOnly: _mode == 'ia' && !_isEditing,
                         onEdit: _mode == 'manual' || _isEditing

@@ -5,29 +5,28 @@ import 'package:MyPocket/Widgets/common/text_widget.dart';
 import 'package:MyPocket/utils/tax_engine_2023.dart';
 import 'package:MyPocket/utils/helpers.dart';
 import 'package:MyPocket/api/tax_api.dart';
-import 'package:MyPocket/Screens/service/tax_radar_screen.dart';
 
-class TaxAssistantScreen extends StatefulWidget {
-  const TaxAssistantScreen({super.key});
+/// Content widget for the tax assistant (no Scaffold/AppBar)
+/// Used inside TaxScreen as a tab
+class TaxAssistantContent extends StatefulWidget {
+  const TaxAssistantContent({super.key});
 
   @override
-  State<TaxAssistantScreen> createState() => _TaxAssistantScreenState();
+  State<TaxAssistantContent> createState() => _TaxAssistantContentState();
 }
 
-class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
+class _TaxAssistantContentState extends State<TaxAssistantContent> {
   final TaxApi _taxApi = TaxApi();
 
   bool _isLoading = false;
   bool _isAutoMode = true;
 
-  // Variables Financieras
   double _totalIncome = 0;
   double _totalAssets = 0;
   double _deductions = 0;
   double _withholdings = 0;
   int _dependents = 0;
 
-  // Resultados
   bool _isObligated = false;
   double _taxToPay = 0;
   String _statusMessage = "Listo";
@@ -38,8 +37,6 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAutoData());
   }
-
-  // --- LÓGICA DE NEGOCIO ---
 
   Future<void> _fetchAutoData() async {
     setState(() => _isLoading = true);
@@ -152,47 +149,19 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
   }
 
   void _recalculate() {
-    final check = TaxEngine2023.checkObligation(
-      patrimonio: _totalAssets,
-      ingresos: _totalIncome,
-      tarjetas: 0,
-      consumos: 0,
-      consignaciones: 0,
+    final taxResult = _calculateTaxResult(
+      totalIncome: _totalIncome,
+      totalAssets: _totalAssets,
+      withholdings: _withholdings,
+      deductions: _deductions,
     );
 
-    _isObligated = check['obligado'];
-
-    if (!_isObligated) {
-      _statusMessage = "No estás obligado";
-      _statusColor = Colors.green;
-      _taxToPay = 0;
-      return;
-    }
-
-    double mandatoryContribution = _totalIncome * 0.08;
-    final result = TaxEngine2023.calculateTax(
-      ingresosTotales: _totalIncome,
-      ingresosNoConstitutivos: mandatoryContribution,
-      deducVivienda: _deductions,
-      deducSaludPrep: 0,
-      numeroDependientes: _dependents,
-      aportesVoluntarios: 0,
-      costosGastos: 0,
-    );
-
-    double netPay = (result['impuesto'] ?? 0) - _withholdings;
-    _taxToPay = netPay;
-
-    if (netPay < 0) {
-      _statusMessage = "Saldo a Favor";
-      _statusColor = Colors.green;
-    } else if (netPay == 0) {
-      _statusMessage = "Declaras en Ceros";
-      _statusColor = Colors.blue;
-    } else {
-      _statusMessage = "Impuesto Estimado";
-      _statusColor = Colors.red;
-    }
+    setState(() {
+      _isObligated = taxResult['isObligated'];
+      _taxToPay = taxResult['taxToPay'];
+      _statusMessage = taxResult['statusMessage'];
+      _statusColor = taxResult['statusColor'];
+    });
   }
 
   double _safeParse(dynamic value) {
@@ -200,58 +169,100 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
     return double.tryParse(value.toString().replaceAll(',', '')) ?? 0.0;
   }
 
-  // --- UI ---
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const TextWidget(
-            text: "Asistente Tributario 2025",
-            color: Colors.black,
-            size: 18,
-            fontWeight: FontWeight.bold),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
-            onPressed: () => Navigator.pop(context)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: IconButton(
-              icon: Icon(Icons.bar_chart_rounded,
-                  color: AppTheme.primaryColor, size: 28),
-              tooltip: "Radar 2026",
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const TaxRadarScreen())),
-            ),
-          )
+    if (_isLoading) {
+      return Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor));
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          _buildModeTabs(),
+          const SizedBox(height: 25),
+          _buildResultCard(),
+          const SizedBox(height: 30),
+          _buildFormSection(),
+          const SizedBox(height: 50),
         ],
       ),
-      body: _isLoading
-          ? Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryColor))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // 1. Selector
-                  _buildModeTabs(),
-                  const SizedBox(height: 25),
-                  // 2. Resultado
-                  _buildResultCard(),
-                  const SizedBox(height: 30),
-                  // 3. Formulario
-                  _buildFormSection(),
-                  const SizedBox(height: 30),
-                  ButtonCustom(
-                      text: "Finalizar", onTap: () => Navigator.pop(context)),
-                ],
-              ),
-            ),
+    );
+  }
+
+  Widget _buildModeTabs() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+          color: Colors.grey[200], borderRadius: BorderRadius.circular(25)),
+      child: Row(children: [
+        _tabItem("Automático", _isAutoMode, _fetchAutoData),
+        _tabItem("Manual", !_isAutoMode, _switchToManual),
+      ]),
+    );
+  }
+
+  Widget _tabItem(String title, bool active, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+              color: active ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(20)),
+          child: Text(title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: active ? Colors.black : Colors.grey)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: _statusColor.withValues(alpha: 0.3)),
+          boxShadow: [
+            BoxShadow(color: _statusColor.withValues(alpha: 0.1), blurRadius: 20)
+          ]),
+      child: Column(children: [
+        Icon(
+            _isObligated
+                ? Icons.gavel_rounded
+                : Icons.check_circle_outline,
+            size: 40,
+            color: _statusColor),
+        const SizedBox(height: 10),
+        Text(_statusMessage,
+            style: TextStyle(
+                color: _statusColor,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
+        const SizedBox(height: 5),
+        if (_isObligated)
+          Text(formatCurrency(_taxToPay.abs()),
+              style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.w900,
+                  color: _statusColor))
+        else
+          const Padding(
+              padding: EdgeInsets.only(top: 5),
+              child: Text("¡Estás libre!",
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey))),
+      ]),
     );
   }
 
@@ -315,79 +326,6 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
     );
   }
 
-  // --- COMPONENTS ---
-
-  Widget _buildModeTabs() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-          color: Colors.grey[200], borderRadius: BorderRadius.circular(25)),
-      child: Row(children: [
-        _tabItem("Automático", _isAutoMode, _fetchAutoData),
-        _tabItem("Manual", !_isAutoMode, _switchToManual),
-      ]),
-    );
-  }
-
-  Widget _tabItem(String title, bool active, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-              color: active ? Colors.white : Colors.transparent,
-              borderRadius: BorderRadius.circular(20)),
-          child: Text(title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: active ? Colors.black : Colors.grey)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResultCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(25),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: _statusColor.withOpacity(0.3)),
-          boxShadow: [
-            BoxShadow(color: _statusColor.withOpacity(0.1), blurRadius: 20)
-          ]),
-      child: Column(children: [
-        Icon(_isObligated ? Icons.gavel_rounded : Icons.check_circle_outline,
-            size: 40, color: _statusColor),
-        const SizedBox(height: 10),
-        Text(_statusMessage,
-            style: TextStyle(
-                color: _statusColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
-        const SizedBox(height: 5),
-        if (_isObligated)
-          Text(formatCurrency(_taxToPay.abs()),
-              style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                  color: _statusColor))
-        else
-          const Padding(
-              padding: EdgeInsets.only(top: 5),
-              child: Text("¡Estás libre!",
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey))),
-      ]),
-    );
-  }
-
   Widget _buildDataCard(String label, double value, IconData icon, Color color,
       Function(double) onChanged) {
     return GestureDetector(
@@ -398,11 +336,12 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), shape: BoxShape.circle),
+                  color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 20)),
           const SizedBox(height: 12),
           Text(label,
@@ -411,8 +350,8 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
                   fontSize: 11,
                   fontWeight: FontWeight.w500)),
           Text(formatCurrency(value),
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 15)),
         ]),
       ),
     );
@@ -427,12 +366,15 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                  color: Colors.pink.withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(Icons.people_outline, color: Colors.pink, size: 20)),
+                  color: Colors.pink.withValues(alpha: 0.1),
+                  shape: BoxShape.circle),
+              child:
+                  Icon(Icons.people_outline, color: Colors.pink, size: 20)),
           const SizedBox(height: 12),
           const Text("Dependientes",
               style: TextStyle(
@@ -440,8 +382,8 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
                   fontSize: 11,
                   fontWeight: FontWeight.w500)),
           Text("$_dependents persona${_dependents != 1 ? 's' : ''}",
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 15)),
         ]),
       ),
     );
@@ -460,12 +402,14 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
         Expanded(
             child: Text(
                 "Nota: El patrimonio es estimado. Edítalo para incluir bienes externos. Deducción de 72 UVT por dependiente.",
-                style: TextStyle(color: Colors.brown[800], fontSize: 11)))
+                style:
+                    TextStyle(color: Colors.brown[800], fontSize: 11)))
       ]),
     );
   }
 
-  void _showEditModal(String title, double current, Function(double) onSave) {
+  void _showEditModal(
+      String title, double current, Function(double) onSave) {
     final ctrl = TextEditingController(
         text: current == 0 ? "" : current.toStringAsFixed(0));
     showModalBottomSheet(
@@ -526,11 +470,12 @@ class _TaxAssistantScreenState extends State<TaxAssistantScreen> {
                       BorderRadius.vertical(top: Radius.circular(25))),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Text("Número de Dependientes",
-                    style:
-                        TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 Text("Hasta 4 dependientes (72 UVT cada uno)",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    style:
+                        TextStyle(color: Colors.grey[600], fontSize: 12)),
                 const SizedBox(height: 20),
                 Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
