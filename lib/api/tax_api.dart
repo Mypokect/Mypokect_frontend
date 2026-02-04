@@ -4,53 +4,58 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Services/base_url.dart';
 
 class TaxApi {
-  
-  // --- 1. DATOS PARA ASISTENTE (Llenado Automático) ---
-  Future<Map<String, dynamic>> getTaxData() async {
+  Future<Map<String, String>> _getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('toke'); // Asegúrate que tu key es 'toke' como en login
+    final token = prefs.getString('toke');
+    if (token == null) throw Exception('No has iniciado sesión.');
+    return {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    };
+  }
 
-    final url = Uri.parse('${BaseUrl.apiUrl}taxes/data'); 
+  /// GET /taxes/data → retorna el contenido de `data` directamente
+  Future<Map<String, dynamic>> getTaxData() async {
+    final url = Uri.parse('${BaseUrl.apiUrl}taxes/data');
+    try {
+      final response = await http.get(url, headers: await _getHeaders());
+      print('🔵 getTaxData status: ${response.statusCode}');
+      print('🔵 getTaxData body: ${response.body}');
 
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Error Backend (${response.statusCode}): ${response.body}');
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        // Backend: {status, message, data: {ingresos_totales, patrimonio_estimado, ...}}
+        if (json['data'] is Map) {
+          return Map<String, dynamic>.from(json['data']);
+        }
+        return json;
+      } else {
+        throw Exception('Error Backend (${response.statusCode})');
+      }
+    } catch (e) {
+      print('🔴 getTaxData error: $e');
+      rethrow;
     }
   }
 
-  // --- 2. NUEVO: DATOS PARA RADAR DE ALERTAS 2026 ---
-  // Esta es la función que necesitas para ver las barras de progreso
+  /// GET /taxes/alerts → retorna {data: [...], summary_message: "..."}
   Future<Map<String, dynamic>> getTaxAlerts() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('toke');
-    
-    // Apunta al nuevo endpoint checkLimits que creamos en Laravel
-    final url = Uri.parse('${BaseUrl.apiUrl}taxes/alerts'); 
-
+    final url = Uri.parse('${BaseUrl.apiUrl}taxes/alerts');
     try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
+      final response = await http.get(url, headers: await _getHeaders());
+      print('🔵 getTaxAlerts status: ${response.statusCode}');
+      print('🔵 getTaxAlerts body: ${response.body}');
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final json = jsonDecode(response.body);
+        // Backend puede enviar: {status, message, data: [...], summary_message: "..."}
+        // o: {data: [...], summary_message: "..."}
+        return json;
       } else {
-        throw Exception('Error al cargar alertas: ${response.statusCode}');
+        throw Exception('Error alertas (${response.statusCode})');
       }
     } catch (e) {
+      print('🔴 getTaxAlerts error: $e');
       rethrow;
     }
   }

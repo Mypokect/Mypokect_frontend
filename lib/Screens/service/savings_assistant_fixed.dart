@@ -6,6 +6,7 @@ import 'package:MyPocket/Widgets/common/button_custom.dart';
 import 'package:MyPocket/Widgets/savings/savings_tab_switch_widget.dart';
 import 'package:MyPocket/Widgets/savings/savings_goal_card_widget.dart';
 import 'package:MyPocket/Widgets/savings/savings_info_row_widget.dart';
+import 'package:MyPocket/utils/helpers.dart';
 
 class AsistenteAhorroPage extends StatefulWidget {
   const AsistenteAhorroPage({super.key});
@@ -112,28 +113,16 @@ class _AsistenteAhorroPageState extends State<AsistenteAhorroPage> {
             ),
             child: Column(
               children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        themeColor.withValues(alpha: 0.2),
-                        themeColor.withValues(alpha: 0.05),
-                      ],
-                    ),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: TextWidget(
-                      text: '\$${ahorroSugerido.toStringAsFixed(0)}',
-                      size: 24,
-                      fontWeight: FontWeight.bold,
-                      color: themeColor,
-                    ),
+                Text(
+                  formatCurrency(ahorroSugerido),
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    color: themeColor,
+                    letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 15),
+                const SizedBox(height: 8),
                 TextWidget(
                   text: _isMonthly
                       ? "Ahorro Mensual Sugerido"

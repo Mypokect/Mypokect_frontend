@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:MyPocket/api/tax_api.dart';
+import 'package:flutter/services.dart';
 import 'package:MyPocket/Theme/theme.dart';
-import 'package:MyPocket/Widgets/common/button_custom.dart';
-import 'package:MyPocket/utils/tax_engine_2023.dart';
 import 'package:MyPocket/utils/helpers.dart';
+import 'package:MyPocket/utils/tax_engine_2023.dart';
+import 'package:MyPocket/api/tax_api.dart';
+import 'package:MyPocket/Screens/service/tax_monitor_screen.dart';
 
 class TaxScreen extends StatefulWidget {
   const TaxScreen({super.key});
@@ -13,72 +14,27 @@ class TaxScreen extends StatefulWidget {
 }
 
 class _TaxScreenState extends State<TaxScreen> {
-  // --- DEPENDENCIAS ---
   final TaxApi _api = TaxApi();
 
-  // --- ESTADO GLOBAL ---
   bool _loading = true;
-  bool _isAutoMode = true;
 
-  // --- DATOS SIMULADOR ---
-  double _totalIncome = 0;
-  double _totalAssets = 0;
-  double _deductions = 0;
-  double _withholdings = 0;
-  int _dependents = 0;
-  bool _isObligated = false;
-  double _taxToPay = 0;
-  String _simStatusMsg = "Calculando...";
-  Color _simStatusColor = Colors.grey;
+  // Valores editables
+  double _ingresos = 0;
+  double _patrimonio = 0;
+  double _deducciones = 0;
+  double _retenciones = 0;
+  int _dependientes = 0;
 
-  // --- DATOS RADAR ---
-  List<dynamic> _radarAlerts = [];
-  String _radarMsg = "Cargando radar...";
+  // Resultado
+  bool _isObligado = false;
+  double _impuestoEstimado = 0;
+  String _statusMsg = "";
+  Color _statusColor = Colors.green;
 
   @override
   void initState() {
     super.initState();
-    _fetchAllData();
-  }
-
-  Future<void> _fetchAllData() async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-
-    try {
-      final results = await Future.wait([
-        _api.getTaxData(),
-        _api.getTaxAlerts(),
-      ]);
-
-      if (!mounted) return;
-
-      final taxData = results[0];
-      final radarData = results[1];
-
-      double income = _safeParse(taxData['ingresos_totales']);
-      double assets = _safeParse(taxData['patrimonio_estimado']);
-      double ret = _safeParse(taxData['retenciones']);
-      double ded = _safeParse(taxData['deduc_vivienda']) +
-          _safeParse(taxData['deduc_salud']);
-
-      List<dynamic> alerts = radarData['data'] ?? [];
-      String rMsg = radarData['summary_message'] ?? "";
-
-      setState(() {
-        _isAutoMode = true;
-        _totalIncome = income;
-        _totalAssets = assets;
-        _withholdings = ret;
-        _deductions = ded;
-        _radarAlerts = alerts;
-        _radarMsg = rMsg;
-        _calculateSimulatorLocal();
-        _loading = false;
-      });
-    } catch (e) {
-      if (mounted) setState(() => _loading = false);
-    }
+    _fetchAutoData();
   }
 
   Future<void> _fetchAutoData() async {
@@ -88,338 +44,443 @@ class _TaxScreenState extends State<TaxScreen> {
       if (!mounted) return;
 
       setState(() {
-        _isAutoMode = true;
-        _totalIncome = _safeParse(data['ingresos_totales']);
-        _totalAssets = _safeParse(data['patrimonio_estimado']);
-        _withholdings = _safeParse(data['retenciones']);
-        _deductions = _safeParse(data['deduc_vivienda']) +
-            _safeParse(data['deduc_salud']);
-        _calculateSimulatorLocal();
+        _ingresos = _safeParse(data['ingresos_totales']);
+        _patrimonio = _safeParse(data['patrimonio_estimado']);
+        _deducciones = _safeParse(data['deducciones']);
+        _retenciones = _safeParse(data['retenciones']);
+        _dependientes = (data['dependientes'] as int?) ?? 0;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      _recalculate();
+    } catch (e) {
+      print('Error fetching tax data: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        _recalculate();
+      }
     }
   }
 
-  // --- MOTOR DE CÁLCULO LOCAL ---
-  void _calculateSimulatorLocal() {
-    final check = TaxEngine2023.checkObligation(
-      patrimonio: _totalAssets,
-      ingresos: _totalIncome,
+  double _safeParse(dynamic val) {
+    if (val == null) return 0;
+    if (val is num) return val.toDouble();
+    return double.tryParse(val.toString()) ?? 0;
+  }
+
+  void _recalculate() {
+    final obligation = TaxEngine2023.checkObligation(
+      patrimonio: _patrimonio,
+      ingresos: _ingresos,
       tarjetas: 0,
       consumos: 0,
-      consignaciones: 0,
+      consignaciones: _ingresos,
     );
-    bool obligated = check['obligado'];
 
-    double mandatory = _totalIncome * 0.08;
+    _isObligado = obligation['obligado'] as bool;
+
     final result = TaxEngine2023.calculateTax(
-      ingresosTotales: _totalIncome,
-      ingresosNoConstitutivos: mandatory,
-      deducVivienda: _deductions,
-      deducSaludPrep: 0,
-      numeroDependientes: _dependents,
+      ingresosTotales: _ingresos,
+      ingresosNoConstitutivos: 0,
+      deducVivienda: _deducciones * 0.5,
+      deducSaludPrep: _deducciones * 0.5,
+      numeroDependientes: _dependientes,
       aportesVoluntarios: 0,
       costosGastos: 0,
     );
 
-    double gross = result['impuesto'] ?? 0;
-    double net = gross - _withholdings;
+    double impuestoBruto = result['impuesto'] ?? 0;
+    _impuestoEstimado = (impuestoBruto - _retenciones).clamp(0, double.infinity);
 
-    String msg;
-    Color col;
-
-    if (!obligated) {
-      msg = "No estás obligado";
-      col = Colors.green;
-      net = 0;
-    } else if (net < 0) {
-      msg = "Saldo a Favor";
-      col = Colors.green;
-    } else if (net == 0) {
-      msg = "Declaras en Ceros";
-      col = Colors.blue;
+    if (_isObligado) {
+      if (_impuestoEstimado > 0) {
+        _statusMsg = "Impuesto Estimado";
+        _statusColor = Colors.red;
+      } else {
+        _statusMsg = "Declaras en Ceros";
+        _statusColor = Colors.blue;
+      }
     } else {
-      msg = "Impuesto Estimado";
-      col = Colors.red;
+      _statusMsg = "No estás obligado";
+      _statusColor = const Color(0xFF43A047);
     }
 
-    _isObligated = obligated;
-    _taxToPay = net;
-    _simStatusMsg = msg;
-    _simStatusColor = col;
+    setState(() {});
   }
 
-  void _recalculate() => setState(() => _calculateSimulatorLocal());
 
-  void _switchToManual() {
-    setState(() {
-      _isAutoMode = false;
-      _totalIncome = 0;
-      _totalAssets = 0;
-      _deductions = 0;
-      _withholdings = 0;
-      _dependents = 0;
-      _calculateSimulatorLocal();
-    });
+  void _showEditModal(String title, double currentValue, Color iconColor, Function(double) onSave) {
+    final controller = TextEditingController(
+      text: currentValue > 0 ? currentValue.toStringAsFixed(0) : '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          top: 25,
+          left: 20,
+          right: 20,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Editar $title",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              autofocus: true,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: iconColor,
+              ),
+              decoration: InputDecoration(
+                prefixIcon: Icon(Icons.attach_money, color: iconColor),
+                filled: true,
+                fillColor: Colors.grey[100],
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide(color: iconColor, width: 2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  final val = double.tryParse(controller.text) ?? 0;
+                  onSave(val);
+                  Navigator.pop(ctx);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: iconColor,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                child: const Text(
+                  "Actualizar",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  double _safeParse(dynamic value) {
-    if (value == null) return 0.0;
-    return double.tryParse(value.toString().replaceAll(',', '')) ?? 0.0;
+  void _showDependentsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "Número de Dependientes",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Máximo 4 dependientes con beneficio fiscal",
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              children: List.generate(5, (i) {
+                final isSelected = _dependientes == i;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _dependientes = i);
+                    _recalculate();
+                    Navigator.pop(ctx);
+                  },
+                  child: Container(
+                    width: 55,
+                    height: 55,
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.teal : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                      border: isSelected ? null : Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "$i",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
   }
-
-  // ═══════════════════════════════════════════
-  //  UI UNIFICADA
-  // ═══════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          "Gestión de Impuestos",
+          "Mi Situación Fiscal",
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
             fontSize: 18,
-            fontFamily: 'Baloo2',
           ),
         ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
-              color: Colors.black, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: _loading
-          ? Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryColor))
+          ? Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
           : ListView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               physics: const BouncingScrollPhysics(),
               children: [
-                // ==========================================
-                // PARTE 1: SIMULADOR DE RENTA
-                // ==========================================
-                _sectionTitle("Simulador de Renta"),
-                _buildSimResultCard(),
+                // Sección título
+                _buildSectionTitle("Simulador de Renta"),
+
+                // Resultado principal
+                _buildResultCard(),
                 const SizedBox(height: 20),
 
-                _buildModeTabs(),
-                const SizedBox(height: 20),
+                // Data cards con colores
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDataCard(
+                        "Ingresos",
+                        _ingresos,
+                        Icons.attach_money,
+                        Colors.green,
+                        () => _showEditModal("Ingresos", _ingresos, Colors.green, (v) {
+                          setState(() => _ingresos = v);
+                          _recalculate();
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildDataCard(
+                        "Patrimonio",
+                        _patrimonio,
+                        Icons.home_work,
+                        Colors.blue,
+                        () => _showEditModal("Patrimonio", _patrimonio, Colors.blue, (v) {
+                          setState(() => _patrimonio = v);
+                          _recalculate();
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDataCard(
+                        "Deducciones",
+                        _deducciones,
+                        Icons.receipt_long,
+                        Colors.orange,
+                        () => _showEditModal("Deducciones", _deducciones, Colors.orange, (v) {
+                          setState(() => _deducciones = v);
+                          _recalculate();
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: _buildDataCard(
+                        "Retenciones",
+                        _retenciones,
+                        Icons.verified_user,
+                        Colors.purple,
+                        () => _showEditModal("Retenciones", _retenciones, Colors.purple, (v) {
+                          setState(() => _retenciones = v);
+                          _recalculate();
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
 
-                // Data Cards
-                Row(children: [
-                  Expanded(
-                      child: _buildDataCard(
-                          "Ingresos", _totalIncome, Icons.attach_money,
-                          Colors.green, (v) {
-                    setState(() {
-                      _totalIncome = v;
-                      _recalculate();
-                    });
-                  })),
-                  const SizedBox(width: 15),
-                  Expanded(
-                      child: _buildDataCard(
-                          "Patrimonio", _totalAssets, Icons.home_work,
-                          Colors.blue, (v) {
-                    setState(() {
-                      _totalAssets = v;
-                      _recalculate();
-                    });
-                  })),
-                ]),
-                const SizedBox(height: 15),
-                Row(children: [
-                  Expanded(
-                      child: _buildDataCard(
-                          "Deducciones", _deductions, Icons.receipt_long,
-                          Colors.orange, (v) {
-                    setState(() {
-                      _deductions = v;
-                      _recalculate();
-                    });
-                  })),
-                  const SizedBox(width: 15),
-                  Expanded(
-                      child: _buildDataCard(
-                          "Retenciones", _withholdings, Icons.verified_user,
-                          Colors.purple, (v) {
-                    setState(() {
-                      _withholdings = v;
-                      _recalculate();
-                    });
-                  })),
-                ]),
-                const SizedBox(height: 15),
+                // Dependientes
                 _buildDependentsCard(),
 
-                const SizedBox(height: 15),
-                _buildDisclaimer(),
-
                 const SizedBox(height: 30),
-                const Divider(thickness: 1, color: Colors.black12),
-                const SizedBox(height: 30),
-
-                // ==========================================
-                // PARTE 2: RADAR DE ALERTAS
-                // ==========================================
-                _sectionTitle("Radar de Topes 2026"),
-                _buildRadarHeader(),
+                const Divider(thickness: 1.5, color: Colors.black12),
                 const SizedBox(height: 20),
 
-                if (_radarAlerts.isEmpty)
-                  Center(
-                      child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text("Sin alertas activas",
-                        style: TextStyle(color: Colors.grey[500])),
-                  ))
-                else
-                  ..._radarAlerts.map((alert) => _buildAlertBar(alert)),
+                // CTA al Monitor Fiscal
+                _buildSectionTitle("Radar de Topes"),
+                _buildMonitorCTA(),
 
+                const SizedBox(height: 25),
+                _buildDisclaimer(),
                 const SizedBox(height: 80),
               ],
             ),
     );
   }
 
-  // ═══════════════════════════════════════════
-  //  WIDGETS AUXILIARES
-  // ═══════════════════════════════════════════
-
-  Widget _sectionTitle(String title) {
+  Widget _buildSectionTitle(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
-      child: Text(title,
-          style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: Colors.blueGrey[700])),
-    );
-  }
-
-  // --- SIMULADOR ---
-
-  Widget _buildSimResultCard() {
-    return Container(
-      padding: const EdgeInsets.all(25),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _simStatusColor.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-              color: _simStatusColor.withValues(alpha: 0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 5))
-        ],
-      ),
-      child: Column(children: [
-        Icon(
-            _isObligated
-                ? Icons.gavel_rounded
-                : Icons.check_circle_outline,
-            size: 40,
-            color: _simStatusColor),
-        const SizedBox(height: 10),
-        Text(_simStatusMsg,
-            style: TextStyle(
-                color: _simStatusColor,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
-        if (_isObligated) ...[
-          const SizedBox(height: 5),
-          Text(formatCurrency(_taxToPay.abs()),
-              style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: _simStatusColor,
-                  letterSpacing: -1))
-        ] else
-          const Padding(
-            padding: EdgeInsets.only(top: 5),
-            child: Text("¡Estás libre!",
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey)),
-          ),
-      ]),
-    );
-  }
-
-  Widget _buildModeTabs() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-          color: Colors.grey[200], borderRadius: BorderRadius.circular(20)),
-      child: Row(children: [
-        _tabItem("Automático", _isAutoMode, _fetchAutoData),
-        _tabItem("Manual", !_isAutoMode, _switchToManual),
-      ]),
-    );
-  }
-
-  Widget _tabItem(String title, bool active, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: active ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: active
-                ? [const BoxShadow(color: Colors.black12, blurRadius: 4)]
-                : [],
-          ),
-          child: Text(title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: active ? Colors.black : Colors.grey,
-                  fontSize: 13)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[700],
         ),
       ),
     );
   }
 
-  Widget _buildDataCard(String label, double value, IconData icon, Color color,
-      Function(double) onChanged) {
+  Widget _buildResultCard() {
+    return Container(
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _statusColor.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: _statusColor.withValues(alpha: 0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(
+            _isObligado ? Icons.gavel : Icons.check_circle,
+            size: 40,
+            color: _statusColor,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _statusMsg,
+            style: TextStyle(
+              color: _statusColor,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (_isObligado) ...[
+            const SizedBox(height: 5),
+            Text(
+              formatCurrency(_impuestoEstimado.abs()),
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: _statusColor,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataCard(String label, double value, IconData icon, Color color, VoidCallback onTap) {
     return GestureDetector(
-      onTap: () => _showEditModal(label, value, onChanged),
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
-            const BoxShadow(
-                color: Colors.black12, blurRadius: 5, offset: Offset(0, 2))
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 10),
-          Text(label,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 22),
+                Icon(Icons.edit, color: Colors.grey[400], size: 14),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              formatCurrency(value),
               style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500)),
-          Text(formatCurrency(value),
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold)),
-        ]),
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -433,258 +494,162 @@ class _TaxScreenState extends State<TaxScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(15),
           boxShadow: [
-            const BoxShadow(
-                color: Colors.black12, blurRadius: 5, offset: Offset(0, 2))
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.people_outline, color: Colors.pink, size: 22),
-          const SizedBox(height: 10),
-          const Text("Dependientes",
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500)),
-          Text("$_dependents persona${_dependents != 1 ? 's' : ''}",
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.bold)),
-        ]),
+        child: Row(
+          children: [
+            Icon(Icons.family_restroom, color: Colors.teal, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Dependientes",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    "Deducción: ${formatCurrency(_dependientes * 72 * TaxEngine2023.UVT)}",
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.teal.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                "$_dependientes",
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.teal,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: Colors.grey[400]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMonitorCTA() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TaxMonitorScreen(
+              ingresos: _ingresos,
+              patrimonio: _patrimonio,
+              tarjetas: _ingresos * 0.3, // Estimación gastos tarjeta
+              consumos: _ingresos * 0.5, // Estimación consumos
+              consignaciones: _ingresos, // Consignaciones ≈ ingresos
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: [Colors.orange, Colors.amber],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.orange.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.analytics_outlined,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Monitor Fiscal 2026",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "Ver progreso hacia los topes de declaración",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white70,
+              size: 18,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildDisclaimer() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-          color: Colors.amber[50],
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.amber[200]!)),
-      child: Row(children: [
-        Icon(Icons.info_outline, size: 18, color: Colors.orange[800]),
-        const SizedBox(width: 10),
-        Expanded(
-            child: Text(
-                "Nota: El patrimonio es estimado. Edítalo para incluir bienes externos. Deducción de 72 UVT por dependiente.",
-                style: TextStyle(color: Colors.brown[800], fontSize: 11)))
-      ]),
-    );
-  }
-
-  // --- RADAR ---
-
-  Widget _buildRadarHeader() {
-    Color c1 = Colors.green, c2 = Colors.greenAccent;
-    IconData icon = Icons.security;
-
-    if (_radarMsg.contains("Atención") || _radarMsg.contains("superado")) {
-      c1 = Colors.red;
-      c2 = Colors.redAccent;
-      icon = Icons.warning_amber_rounded;
-    } else if (_radarMsg.contains("Cuidado") ||
-        _radarMsg.contains("cerca")) {
-      c1 = Colors.orange;
-      c2 = Colors.amber;
-      icon = Icons.priority_high_rounded;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(colors: [c1, c2]),
-        boxShadow: [
-          BoxShadow(
-              color: c1.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 5))
-        ],
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[200]!),
       ),
-      child: Row(children: [
-        Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle),
-            child: Icon(icon, color: Colors.white)),
-        const SizedBox(width: 15),
-        Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              const Text("Diagnóstico Topes 2026",
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold)),
-              Text(_radarMsg,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold)),
-            ]))
-      ]),
-    );
-  }
-
-  Widget _buildAlertBar(Map<String, dynamic> alert) {
-    double pct = double.parse(alert['percentage'].toString());
-    double cur = double.parse(alert['current_amount'].toString());
-    double lim = double.parse(alert['limit_amount'].toString());
-    String status = alert['status'];
-    Color c = status == 'exceeded'
-        ? Colors.red
-        : (status == 'warning' ? Colors.orange : Colors.green);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04), blurRadius: 10)
-        ],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: Colors.blue[700]),
+          const SizedBox(width: 10),
           Expanded(
-              child: Text(alert['title'],
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 14))),
-          Text("${pct.clamp(0, 999)}%",
-              style: TextStyle(color: c, fontWeight: FontWeight.bold))
-        ]),
-        const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(5),
-          child: LinearProgressIndicator(
-              value: (pct / 100).clamp(0.0, 1.0),
-              backgroundColor: Colors.grey[200],
-              valueColor: AlwaysStoppedAnimation(c),
-              minHeight: 8),
-        ),
-        const SizedBox(height: 8),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text("Llevas: ${formatCurrency(cur)}",
-              style: TextStyle(
-                  fontSize: 12,
-                  color: cur > lim ? Colors.red : Colors.grey)),
-          Text("Límite: ${formatCurrency(lim)}",
-              style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.bold)),
-        ])
-      ]),
+            child: Text(
+              "Este cálculo es estimado basado en la UVT 2025 (\$49.799). Para un cálculo oficial, consulta con un contador.",
+              style: TextStyle(color: Colors.blue[800], fontSize: 11),
+            ),
+          ),
+        ],
+      ),
     );
-  }
-
-  // ═══════════════════════════════════════════
-  //  MODALS
-  // ═══════════════════════════════════════════
-
-  void _showEditModal(
-      String title, double current, Function(double) onSave) {
-    final ctrl = TextEditingController(
-        text: current == 0 ? "" : current.toStringAsFixed(0));
-    showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => Container(
-              padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                  top: 25,
-                  left: 20,
-                  right: 20),
-              decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(25))),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text("Editar $title",
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryColor),
-                    decoration: InputDecoration(
-                        prefixIcon: Icon(Icons.attach_money,
-                            color: AppTheme.primaryColor),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            borderSide: BorderSide.none))),
-                const SizedBox(height: 25),
-                ButtonCustom(
-                    text: "Actualizar",
-                    onTap: () {
-                      onSave(double.tryParse(ctrl.text) ?? 0);
-                      Navigator.pop(ctx);
-                    })
-              ]),
-            ));
-  }
-
-  void _showDependentsModal() {
-    showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => Container(
-              padding: const EdgeInsets.all(25),
-              decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(25))),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Text("Número de Dependientes",
-                    style: TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                Text("Hasta 4 dependientes (72 UVT cada uno)",
-                    style:
-                        TextStyle(color: Colors.grey[600], fontSize: 12)),
-                const SizedBox(height: 20),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(5, (index) {
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _dependents = index;
-                            _recalculate();
-                          });
-                          Navigator.pop(ctx);
-                        },
-                        child: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                                color: _dependents == index
-                                    ? AppTheme.primaryColor
-                                    : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(25)),
-                            child: Center(
-                                child: Text(
-                              index.toString(),
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: _dependents == index
-                                      ? Colors.white
-                                      : Colors.black),
-                            ))),
-                      );
-                    })),
-              ]),
-            ));
   }
 }
