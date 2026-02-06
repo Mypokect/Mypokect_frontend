@@ -1,343 +1,339 @@
-// lib/Screens/Movements.dart
-
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:MyPocket/Theme/Theme.dart';
-import 'package:MyPocket/Widgets/TextWidget.dart';
-import 'package:MyPocket/Widgets/animated_toggle_switch.dart';
-import 'package:MyPocket/Widgets/campo_etiquetas.dart';
-import '../../Controllers/movement_controller.dart';
-// Nuevas importaciones
-import 'package:speech_to_text/speech_to_text.dart';
-import 'package:avatar_glow/avatar_glow.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+
+import '../Widgets/common/text_widget.dart';
+import '../Widgets/movements/campo_etiquetas.dart';
+import '../Widgets/movements/tag_chip_selector.dart';
+import '../Widgets/movements/type_selector.dart';
+import '../Widgets/movements/money_input_widget.dart';
+import '../Widgets/movements/footer_actions_widget.dart';
+import '../Widgets/movements/voice_input_mixin.dart';
+import '../Widgets/movements/description_input_widget.dart';
+import '../Widgets/movements/invoice_toggle_widget.dart';
+import '../Widgets/movements/payment_method_selector_widget.dart';
+import '../Widgets/movements/processing_overlay_widget.dart';
+import '../Widgets/movements/suggestion_button_widget.dart';
+import '../Widgets/movements/new_tag_banner_widget.dart';
+import '../Controllers/movement_controller.dart';
+import '../api/goal_contributions_api.dart';
+import '../api/savings_goals_api.dart';
+import '../Theme/Theme.dart';
+import '../utils/movement_utils.dart';
+import 'main_screen.dart';
 
 class Movements extends StatefulWidget {
-  const Movements({super.key});
+  final String? preSelectedTag;
+  const Movements({super.key, this.preSelectedTag});
 
   @override
   State<Movements> createState() => _MovementsState();
 }
 
-class _MovementsState extends State<Movements> {
-  final MovementController _movementController = MovementController();
-  final TextEditingController _nombreController = TextEditingController();
+class _MovementsState extends State<Movements> with VoiceInputMixin {
+  final MovementController _controller = MovementController();
   final TextEditingController _montoController = TextEditingController();
+  final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _etiquetaController = TextEditingController();
+  final FocusNode _montoFocusNode = FocusNode();
 
-  Timer? _debounceTimer;
+  bool _esGasto = true;
+  String _paymentMethod = 'digital';
+  bool _isGoalMode = false;
+  bool _hasInvoice = false;
   List<String> _etiquetasUsuario = [];
-  String? _etiquetaSeleccionada;
+  List<String> _categorias = [];
+  List<String> _metas = [];
+  String? _selectedTag;
+  bool _showAbbreviated = false;
+  Timer? _abbreviationTimer;
+  Timer? _suggestionTimer;
+  bool _isLoadingSuggestion = false;
+  bool _autoSuggestEnabled = true;
+  bool _showNewTagHint = false;
 
-  final SpeechToText _speechToText = SpeechToText();
-  bool _isListening = false;
-  String _lastWords = '';
-
-  // ESTADOS PARA CONTROLAR LA UI Y EVITAR ERRORES
-  bool _esGasto = true; // true = Gasto, false = Ingreso
-  bool _isSettingFromVoice = false; // Bandera para evitar doble llamada a la API
+  Color get _activeColor => _isGoalMode ? AppTheme.goalBlue : (_esGasto ? AppTheme.expenseDarkColor : AppTheme.primaryColor);
 
   @override
   void initState() {
     super.initState();
-    _nombreController.addListener(_onTextChanged);
-    _montoController.addListener(_onTextChanged);
-    _cargarEtiquetas();
-    _initSpeech();
+    _initLogic();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadTags());
   }
 
-  void _initSpeech() async {
-    // La inicialización se maneja en _startListening
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reloadTags();
   }
 
-  void _startListening() async {
-    bool available = await _speechToText.initialize(
-      onStatus: (status) => print('onStatus: $status'),
-      onError: (errorNotification) => print('onError: $errorNotification'),
-    );
-
-    if (available) {
-      setState(() => _isListening = true);
-      _speechToText.listen(
-        onResult: (result) async {
-          _lastWords = result.recognizedWords;
-          print('Palabras reconocidas: $_lastWords');
-
-          if (result.finalResult) {
-            setState(() => _isListening = false);
-            _speechToText.stop();
-
-            if (_lastWords.isNotEmpty) {
-              final sugerencia = await _movementController.procesarSugerenciaPorVoz(
-                transcripcion: _lastWords,
-                context: context,
-              );
-
-              if (sugerencia != null) {
-                // Se activa la bandera para evitar que _onTextChanged se dispare
-                _isSettingFromVoice = true;
-
-                setState(() {
-                  final String description = sugerencia['description'] ?? '';
-                  final String amount = sugerencia['amount'] ?? '';
-                  final String tag = sugerencia['suggested_tag'] ?? '';
-                  final String type = sugerencia['type'] ?? 'expense';
-
-                  _nombreController.text = description;
-                  _montoController.text = amount;
-                  _etiquetaController.text = tag;
-                  _etiquetaSeleccionada = tag;
-                  
-                  // Se actualiza el estado que controla el switch
-                  _esGasto = (type.toLowerCase() == 'expense');
-
-                  if (tag.isNotEmpty && !_etiquetasUsuario.contains(tag)) {
-                    _etiquetasUsuario.insert(0, tag);
-                  }
-                });
-
-                // Se desactiva la bandera después de un breve instante
-                Future.delayed(const Duration(milliseconds: 100), () {
-                  _isSettingFromVoice = false;
-                });
-              }
-            }
-          }
-        },
-        localeId: 'es_ES',
-      );
-    } else {
-      print("El reconocimiento de voz no está disponible.");
-      setState(() => _isListening = false);
-    }
+  @override
+  void didUpdateWidget(Movements oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.preSelectedTag != widget.preSelectedTag) _reloadTags();
   }
 
-  void _stopListening() async {
-    await _speechToText.stop();
-    setState(() => _isListening = false);
+  Future<void> _initLogic() async {
+    await initVoice();
+    await _loadTags();
+    _setupPreSelectedTag();
+    _setupListeners();
+    await _loadAutoSuggestPreference();
   }
 
-  Future<void> _cargarEtiquetas() async {
-    final etiquetas = await _movementController.getEtiquetasUsuario();
-    setState(() => _etiquetasUsuario = etiquetas);
-  }
-
-  // Listener modificado para respetar la bandera _isSettingFromVoice
-  void _onTextChanged() {
-    if (_isSettingFromVoice) return; // Si los cambios vienen de la voz, no hacer nada
-
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () async {
-      final nombre = _nombreController.text.trim();
-      final monto = _montoController.text.trim();
-
-      if (nombre.isNotEmpty && monto.isNotEmpty) {
-        await _movementController.getCategoriaDesdeApi(
-          nombre: nombre,
-          valor: monto,
-          context: context,
-          onSuccess: (etiqueta) {
-            if (etiqueta != null) {
-              setState(() {
-                _etiquetaSeleccionada = etiqueta;
-                _etiquetaController.text = etiqueta;
-              });
-            }
-          },
-        );
-      }
+  Future<void> _loadTags() async {
+    final tags = await _controller.getAllEtiquetas();
+    if (!mounted) return;
+    final separated = MovementUtils.separateTags(tags);
+    setState(() {
+      _etiquetasUsuario = tags;
+      _categorias = separated.categorias;
+      _metas = separated.metas;
     });
   }
 
-  Future<void> _crearEtiquetaSiNoExiste() async {
-    final texto = _etiquetaController.text.trim();
-    if (texto.isEmpty) return;
+  void _setupPreSelectedTag() {
+    if (widget.preSelectedTag == null) return;
+    _etiquetaController.text = widget.preSelectedTag!;
+    _selectedTag = widget.preSelectedTag;
+    _isGoalMode = MovementUtils.isGoalTag(widget.preSelectedTag!, _metas);
+  }
 
-    if (!_etiquetasUsuario.contains(texto)) {
-      final creada = await _movementController.crearEtiqueta(texto, context);
-      if (creada != null) {
-        setState(() {
-          _etiquetasUsuario.add(creada);
-          _etiquetaSeleccionada = creada;
-        });
-      }
-    } else {
-      setState(() {
-        _etiquetaSeleccionada = texto;
-      });
+  void _setupListeners() {
+    _montoController.addListener(_formatCurrency);
+    _nombreController.addListener(_onInputChanged);
+    _montoController.addListener(_onInputChanged);
+    _etiquetaController.addListener(_onTagTextChanged);
+  }
+
+  Future<void> _loadAutoSuggestPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _autoSuggestEnabled = prefs.getBool('auto_suggest_tags') ?? true);
+  }
+
+  Future<void> _reloadTags() async {
+    try { await _loadTags(); } catch (_) {}
+  }
+
+  // === VOICE CALLBACKS ===
+  @override
+  void onTranscription(String text) => setState(() => _nombreController.text = text);
+
+  @override
+  Future<void> onFinalTranscription(String text) async => await _procesarVozConIA();
+
+  @override
+  void onClearFieldsForNewRecording() => setState(() {
+    _nombreController.clear();
+    _montoController.clear();
+    _etiquetaController.clear();
+    _hasInvoice = false;
+    _paymentMethod = 'digital';
+  });
+
+  // === CURRENCY ===
+  void _formatCurrency() {
+    if (_montoController.text.isEmpty) return;
+    _abbreviationTimer?.cancel();
+    setState(() => _showAbbreviated = false);
+
+    final value = _montoController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (value.isEmpty) return;
+
+    final formatted = MovementUtils.formatCurrency(value);
+    if (formatted.isNotEmpty) {
+      _montoController.value = TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
     }
+    _abbreviationTimer = Timer(const Duration(seconds: 2), () { if (mounted) setState(() => _showAbbreviated = true); });
+  }
+
+  // === TAG SUGGESTION ===
+  void _onInputChanged() {
+    _suggestionTimer?.cancel();
+    if (!_autoSuggestEnabled || _nombreController.text.isEmpty || _montoController.text.isEmpty) return;
+    _suggestionTimer = Timer(const Duration(seconds: 1), _sugerirEtiqueta);
+  }
+
+  Future<void> _sugerirEtiqueta() async {
+    if (_etiquetaController.text.isNotEmpty) return;
+    if (mounted) setState(() => _isLoadingSuggestion = true);
+    try {
+      await _controller.getCategoriaDesdeApi(
+        nombre: _nombreController.text,
+        valor: _montoController.text.replaceAll('.', '').replaceAll(',', ''),
+        context: context,
+        onSuccess: (tag) { if (mounted && tag != null && _etiquetaController.text.isEmpty) setState(() => _etiquetaController.text = tag); },
+      );
+    } finally { if (mounted) setState(() => _isLoadingSuggestion = false); }
+  }
+
+  // === TAG HANDLING ===
+  void _onTagSelected(String tag) => setState(() {
+    _selectedTag = tag;
+    _etiquetaController.text = tag;
+    final esMeta = MovementUtils.isGoalTag(tag, _metas);
+    if (esMeta != _isGoalMode) { _isGoalMode = esMeta; HapticFeedback.mediumImpact(); }
+  });
+
+  void _onTagDeselected() => setState(() {
+    _selectedTag = null;
+    _etiquetaController.clear();
+    if (_isGoalMode) { _isGoalMode = false; HapticFeedback.lightImpact(); }
+  });
+
+  void _onTagTextChanged() {
+    final text = _etiquetaController.text.trim();
+    if (text.isEmpty) {
+      if (_selectedTag != null || _showNewTagHint) setState(() { _selectedTag = null; _showNewTagHint = false; if (_isGoalMode) { _isGoalMode = false; HapticFeedback.lightImpact(); } });
+      return;
+    }
+
+    String? matched;
+    for (final tag in _etiquetasUsuario) { if (MovementUtils.hasHighMatch(text, tag)) { matched = tag; break; } }
+
+    if (matched != null) {
+      final esMeta = MovementUtils.isGoalTag(matched, _metas);
+      if (_selectedTag != matched || _isGoalMode != esMeta || _showNewTagHint) {
+        setState(() { _selectedTag = matched; _showNewTagHint = false; if (_isGoalMode != esMeta) { _isGoalMode = esMeta; HapticFeedback.mediumImpact(); } });
+      }
+    } else if (_selectedTag != null || !_showNewTagHint) {
+      setState(() { _selectedTag = null; _showNewTagHint = true; if (_isGoalMode) { _isGoalMode = false; HapticFeedback.lightImpact(); } });
+    }
+  }
+
+  // === VOICE PROCESSING ===
+  Future<void> _procesarVozConIA() async {
+    setState(() => isProcessingAI = true);
+    try {
+      final s = await _controller.procesarSugerenciaPorVoz(transcripcion: _nombreController.text, context: context);
+      if (s != null && mounted) {
+        setState(() {
+          _nombreController.text = s['description'] ?? _nombreController.text;
+          final amt = s['amount']?.toString() ?? '';
+          if (amt.isNotEmpty && amt != '0') _montoController.text = amt;
+          final tag = s['suggested_tag'] ?? '';
+          if (tag.isNotEmpty) { _etiquetaController.text = tag; _selectedTag = tag; }
+          _esGasto = s['type'] == 'expense';
+          _paymentMethod = s['payment_method'] ?? 'digital';
+          _hasInvoice = s['has_invoice'] ?? false;
+          _isGoalMode = MovementUtils.isGoalTag(_etiquetaController.text, _metas);
+          voiceState = VoiceState.success;
+          isProcessingAI = false;
+        });
+        Future.delayed(const Duration(seconds: 1), () { if (mounted) setState(() => voiceState = VoiceState.idle); });
+      } else { _handleVoiceError(); }
+    } catch (e) { _handleVoiceError(e.toString()); }
+  }
+
+  void _handleVoiceError([String? msg]) {
+    if (!mounted) return;
+    setState(() { voiceState = VoiceState.error; isProcessingAI = false; });
+    if (msg != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $msg'), backgroundColor: Colors.red));
+    Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => voiceState = VoiceState.idle); });
+  }
+
+  // === SAVE ===
+  Future<void> _guardarMovimiento() async {
+    if (_montoController.text.isEmpty) { HapticFeedback.mediumImpact(); return; }
+    HapticFeedback.lightImpact();
+    final val = double.tryParse(_montoController.text.replaceAll('.', '')) ?? 0.0;
+    final tag = _etiquetaController.text.trim();
+    if (_isGoalMode && tag.isNotEmpty) { await _saveGoalContribution(tag, val); return; }
+    await _saveRegularMovement(tag, val);
+  }
+
+  Future<void> _saveGoalContribution(String tag, double amount) async {
+    try {
+      final map = await _controller.getGoalTagToIdMap();
+      final id = map[tag];
+      if (id == null) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meta no encontrada'), backgroundColor: Colors.orange)); return; }
+      await GoalContributionsApi().createContribution(goalId: id, amount: amount, description: _nombreController.text.isEmpty ? 'Abono' : _nombreController.text);
+      SavingsGoalsApi.clearCache();
+      if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Abono guardado!'), backgroundColor: Colors.green)); _navigateToHome(); }
+    } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red)); }
+  }
+
+  Future<void> _saveRegularMovement(String tag, double amount) async {
+    var finalTag = tag;
+    if (finalTag.isNotEmpty && !_etiquetasUsuario.any((t) => t.toLowerCase() == finalTag.toLowerCase())) {
+      final created = await _controller.crearEtiqueta(finalTag, context);
+      if (created != null) { finalTag = created; setState(() => _etiquetasUsuario.add(finalTag)); }
+    }
+    await _controller.createMovement(type: _esGasto ? 'expense' : 'income', amount: amount, description: _nombreController.text, tag: finalTag.isEmpty ? null : finalTag, paymentMethod: _paymentMethod, hasInvoice: _hasInvoice, context: context);
+    if (context.mounted) _navigateToHome();
+  }
+
+  void _navigateToHome() => Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const MainScreen()), (_) => false);
+
+  // === BUILD ===
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        elevation: 0, backgroundColor: Colors.transparent, centerTitle: true,
+        leading: IconButton(icon: const Icon(Icons.close_rounded, color: Colors.black26), onPressed: _navigateToHome),
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: TextWidget(key: ValueKey(_isGoalMode), text: _isGoalMode ? "NUEVO ABONO" : "REGISTRO", size: 13, fontWeight: FontWeight.w800, color: _isGoalMode ? AppTheme.goalBlue : Colors.grey.shade400),
+        ),
+      ),
+      body: Stack(children: [_buildBody(), if (isProcessingAI) const ProcessingOverlayWidget()]),
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(children: [
+      Expanded(child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: MovementUtils.responsivePadding(context)),
+        child: Column(children: [
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 20)),
+          MoneyInputWidget(controller: _montoController, focusNode: _montoFocusNode, activeColor: _activeColor, showAbbreviated: _showAbbreviated, onTap: () { _abbreviationTimer?.cancel(); setState(() => _showAbbreviated = false); }, onChanged: (_) => _formatCurrency()),
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 30)),
+          DescriptionInputWidget(controller: _nombreController, activeColor: _activeColor),
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 25)),
+          _buildCategorySection(),
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 16)),
+          if (!_isGoalMode) InvoiceToggleWidget(hasInvoice: _hasInvoice, onChanged: (v) => setState(() => _hasInvoice = v)),
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 24)),
+          if (!_isGoalMode) PaymentMethodSelectorWidget(selectedMethod: _paymentMethod, activeColor: _activeColor, onChanged: (v) => setState(() => _paymentMethod = v)),
+          SizedBox(height: MovementUtils.responsiveSpacing(context, 40)),
+        ]),
+      )),
+      FooterActionsWidget(activeColor: _activeColor, voiceState: voiceState, microphoneAvailable: microphoneAvailable, recordingSeconds: recordingSeconds, onMicTap: toggleVoice, onMicLongPress: startVoice, onMicLongPressUp: isListening ? stopVoice : null, onCancelVoice: cancelVoice, onSave: _guardarMovimiento),
+    ]);
+  }
+
+  Widget _buildCategorySection() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      TagChipSelector(categorias: _categorias, metas: _metas, selectedTag: _selectedTag, onTagSelected: _onTagSelected, onTagDeselected: _onTagDeselected, isGoalMode: _isGoalMode, activeColor: _activeColor),
+      SizedBox(height: MovementUtils.responsiveSpacing(context, 12)),
+      Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        Expanded(child: Row(children: [
+          Expanded(child: SizedBox(height: 48, child: CampoEtiquetas(etiquetaController: _etiquetaController, etiquetasUsuario: _etiquetasUsuario, isLoadingSuggestion: _isLoadingSuggestion, onEtiquetaSeleccionada: _onTagSelected))),
+          const SizedBox(width: 8),
+          SuggestionButtonWidget(isLoading: _isLoadingSuggestion, onTap: _sugerirEtiqueta),
+        ])),
+        SizedBox(width: MovementUtils.responsiveSpacing(context, 10)),
+        if (!_isGoalMode) SizedBox(width: MovementUtils.toggleWidth(context), child: TypeSelector(esGasto: _esGasto, isGoalMode: _isGoalMode, colorActive: _esGasto ? AppTheme.expenseDarkColor : AppTheme.primaryColor, onTap: () => setState(() => _esGasto = !_esGasto))),
+      ]),
+      if (_showNewTagHint) ...[SizedBox(height: MovementUtils.responsiveSpacing(context, 8)), NewTagBannerWidget(tagName: _etiquetaController.text)],
+    ]);
   }
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
-    _nombreController.dispose();
+    _abbreviationTimer?.cancel();
+    _suggestionTimer?.cancel();
+    disposeVoice();
+    _nombreController.removeListener(_onInputChanged);
+    _montoController.removeListener(_onInputChanged);
+    _etiquetaController.removeListener(_onTagTextChanged);
     _montoController.dispose();
+    _nombreController.dispose();
     _etiquetaController.dispose();
-    _speechToText.stop();
+    _montoFocusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final availableHeight = MediaQuery.of(context).size.height -
-        kToolbarHeight -
-        MediaQuery.of(context).padding.top;
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.white,
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.only(left: 10, top: 5, bottom: 5),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(50),
-            ),
-            child: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.black, size: 20),
-          ),
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SizedBox(
-            height: availableHeight,
-            child: Column(
-              children: [
-                const Spacer(flex: 1),
-                Textwidget(
-                  text: 'Dale un nombre a tu movimiento 💵',
-                  size: 35,
-                  color: Colors.black,
-                  fontWeight: FontWeight.w500,
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _nombreController,
-                  decoration: const InputDecoration(
-                    icon: Text('🏷', style: TextStyle(fontSize: 20)),
-                    hintText: 'Ej. Compra del hogar',
-                    hintStyle: TextStyle(
-                        color: Colors.grey, fontSize: 20, fontFamily: 'Baloo2'),
-                    border: InputBorder.none,
-                  ),
-                ),
-                TextFormField(
-                  controller: _montoController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    icon: Text('💰', style: TextStyle(fontSize: 20)),
-                    hintText: 'Ej. \$15.000',
-                    hintStyle: TextStyle(
-                        color: Colors.grey, fontSize: 20, fontFamily: 'Baloo2'),
-                    border: InputBorder.none,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // --- LLAMADA FINAL Y CORRECTA AL WIDGET ---
-                    AnimatedToggleSwitch(
-                      value: _esGasto,
-                      onChanged: (newValue) {
-                        setState(() {
-                          _esGasto = newValue;
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: CampoEtiquetas(
-                        etiquetaController: _etiquetaController,
-                        etiquetasUsuario: _etiquetasUsuario,
-                        onEtiquetaSeleccionada: (etiqueta) {
-                          setState(() {
-                            _etiquetaSeleccionada = etiqueta;
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(flex: 2),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                            _isListening ? Icons.mic_none : Icons.add,
-                            color: Colors.grey[500],
-                            size: 20),
-                        Textwidget(
-                          text: _isListening
-                              ? 'Escuchando...'
-                              : 'Toca para hablar, mantén para guardar',
-                          size: 14,
-                          color: Colors.grey[500]!,
-                          fontWeight: FontWeight.w500,
-                          maxLines: 2,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    AvatarGlow(
-                      animate: _isListening,
-                      glowColor: AppTheme.primaryColor,
-                      duration: const Duration(milliseconds: 2000),
-                      repeat: true,
-                      child: GestureDetector(
-                        onTap: _isListening ? _stopListening : _startListening,
-                        onLongPress: () async {
-                          if (_isListening) _stopListening();
-                          await _crearEtiquetaSiNoExiste();
-                          final tipoMovimiento = _esGasto ? 'Gasto' : 'Ingreso';
-                          print(
-                              'Acción de guardar ejecutada. Tipo: $tipoMovimiento');
-                        },
-                        child: Container(
-                          width: 70,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            borderRadius: BorderRadius.circular(50),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.25),
-                                offset: const Offset(0, 4),
-                                blurRadius: 8,
-                              ),
-                              BoxShadow(
-                                color: AppTheme.primaryColor.withOpacity(0.2),
-                                offset: const Offset(0, 6),
-                                blurRadius: 20,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.mic,
-                            color: Colors.white,
-                            size: 40,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

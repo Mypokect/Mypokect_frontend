@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:MyPocket/Screens/Auth/Login.dart';
+import 'package:MyPocket/Screens/goals_screen.dart';
 import 'package:MyPocket/Screens/home.dart';
 import 'package:MyPocket/Screens/movements.dart';
 import 'package:MyPocket/Screens/service/budgets_list_screen.dart';
 import 'package:MyPocket/Screens/service/savings_goals_screen_new.dart';
+import 'package:MyPocket/Screens/dashboard_screen.dart';
 import 'package:MyPocket/Theme/theme.dart';
 
 class MainScreen extends StatefulWidget {
@@ -24,7 +27,7 @@ class _MainScreenState extends State<MainScreen> {
       const BudgetsListScreen(),
       Container(),
       const SavingsGoalsScreenNew(),
-      Container(),
+      const DashboardScreen(),
     ];
 
     return Scaffold(

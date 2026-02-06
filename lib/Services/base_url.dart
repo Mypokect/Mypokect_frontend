@@ -10,7 +10,7 @@ class BaseUrl {
     if (_isAndroidEmulator) {
       return 'http://10.0.2.2:8000/api/';
     } else {
-      return 'http://192.168.1.14:8000/api/'; // Tu IP local
+      return 'http://192.168.80.34:8000/api/'; // Tu IP local
     }
   }
 }
