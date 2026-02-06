@@ -4,6 +4,7 @@ import 'package:MyPocket/Screens/Auth/Login.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // --- 1. AÑADE ESTOS DOS IMPORTS ---
 import 'package:timezone/data/latest.dart' as tz;
@@ -29,8 +30,8 @@ void main() async {
   await notificationService.requestPermissions();
   // -----------------------------------------------------------------
 
-  // Finalmente, ejecuta la aplicación (esto ya lo tenías y es correcto)
-  runApp(const EasyEconomi());
+  // Finalmente, ejecuta la aplicación envuelta en ProviderScope para Riverpod
+  runApp(const ProviderScope(child: EasyEconomi()));
 }
 
 // =================================================================

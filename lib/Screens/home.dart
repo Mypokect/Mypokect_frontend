@@ -1,3 +1,5 @@
+import 'package:MyPocket/Screens/service/simulator_view.dart';
+import 'package:MyPocket/api/user_api.dart';
 import 'package:flutter/material.dart';
 
 // TUS IMPORTS
@@ -157,9 +159,10 @@ class _HomeState extends State<Home> {
           iconData: Icons.calculate_outlined,
           onTap: () => navigateTo(const TaxScreen())),
       ActionCardData(
-          title: "Calendario de Pagos",
-          iconData: Icons.calendar_month,
-          onTap: () => navigateTo(const CalendarioPage())),
+        title: "Calendario de Pagos", 
+        iconData: Icons.calendar_month, 
+        onTap: () => navigateTo(const CalendarioPage())
+      ),
       ActionCardData(
           title: "Asistente Ahorro",
           iconData: Icons.savings_outlined,
