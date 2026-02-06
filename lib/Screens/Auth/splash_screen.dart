@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../mainScreen.dart';
+import '../main_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -18,9 +18,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
   _verifyToken() async {
     await Future.delayed(Duration(seconds: 3), () {});
-    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => Mainscreen()), (route) => false);
+    Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+        (route) => false);
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +31,11 @@ class _SplashScreenState extends State<SplashScreen> {
         width: MediaQuery.of(context).size.width,
         height: MediaQuery.of(context).size.height,
         child: Center(
-            child: Image.asset(
-              'assets/images/logo.gif',
-              width: 300,
-              height: 300,
-            ),
+          child: Image.asset(
+            'assets/images/logo.gif',
+            width: 300,
+            height: 300,
+          ),
         ),
       ),
     );

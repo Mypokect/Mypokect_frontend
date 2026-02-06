@@ -49,6 +49,7 @@ dependencies:
   
   # Navigation (si no está ya instalado)
   go_router: ^13.0.0
+  fl_chart: ^1.1.1
 
 dev_dependencies:
   flutter_test:

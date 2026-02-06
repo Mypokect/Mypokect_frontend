@@ -1,117 +1,136 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../Services/base_url.dart';
 
 class MovementApi {
-  Future<http.Response> getCategoria({
-    required String nombre,
-    required String valor,
-    required String token,
+  // Helper interno para el token
+  Future<Map<String, String>> _getHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('toke'); // Asegúrate que tu key es 'toke'
+    if (token == null) throw Exception('No has iniciado sesión.');
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+  }
+
+  // 1. Guardar Movimiento
+  Future<http.Response> createMovement({
+    required String type,
+    required double amount,
+    required String description,
+    required String paymentMethod,
+    String? tagName,
+    bool? hasInvoice,
   }) async {
-    try {
-      final url = Uri.parse('${BaseUrl.apiUrl}tags/suggestion');
-      print('🔗 URL: $url');
+    final url = Uri.parse('${BaseUrl.apiUrl}movements');
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: {
-          'descripcion': nombre,
-          'monto': valor,
-        },
-      );
-
-      print('🔁 Status code: ${response.statusCode}');
-      print('📥 Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        return response;
-      } else {
-        final json = jsonDecode(response.body);
-        final msg = json['message'] ?? 'Error desconocido';
-        throw Exception(msg);
-      }
-    } catch (e) {
-      throw Exception(e.toString().replaceFirst('Exception: ', ''));
-    }
-  }
-
-  Future<http.Response> crearEtiqueta(String nombre, String token) async {
-    try {
-      final url = Uri.parse('${BaseUrl.apiUrl}tags/create');
-      print('📤 Creando etiqueta en: $url');
-
-      final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: {
-          'name_tag': nombre,
-        },
-      );
-
-      print('📥 Respuesta crearEtiqueta: ${response.body}');
-      return response;
-    } catch (e) {
-      throw Exception('Error al crear etiqueta: $e');
-    }
-  }
-
-  Future<http.Response> getEtiquetasUsuario(String token) async {
-    try {
-      final url = Uri.parse('${BaseUrl.apiUrl}tags');
-      print('🔍 Consultando etiquetas en: $url');
-
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      );
-
-      print('📥 Respuesta getEtiquetasUsuario: ${response.body}');
-      return response;
-    } catch (e) {
-      throw Exception('Error al obtener etiquetas: $e');
-    }
-  }
-  Future<http.Response> sugerirMovimientoPorVoz({
-  required String transcripcion,
-  required String token,
-}) async {
-  try {
-    // La nueva URL que proporcionaste
-    final url = Uri.parse('${BaseUrl.apiUrl}movements/sugerir-voz');
-    print('🗣️  Enviando transcripción a: $url');
-    print('📝 Transcripción: $transcripcion');
-
+    // NOTA: No recibimos 'token' como parámetro, lo obtenemos en _getHeaders
     final response = await http.post(
       url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-        // Es crucial especificar que el cuerpo es JSON
-        'Content-Type': 'application/json; charset=UTF-8',
-      },
-      // El cuerpo debe ser un string JSON codificado
+      headers: await _getHeaders(),
       body: jsonEncode({
-        'transcripcion': transcripcion,
+        'type': type,
+        'amount': amount,
+        'description': description,
+        'payment_method': paymentMethod,
+        'tag_name': tagName,
+        'has_invoice': hasInvoice ?? false,
       }),
     );
-
-    print('🔁 Status code sugerencia: ${response.statusCode}');
-    print('📥 Body sugerencia: ${response.body}');
-
     return response;
-  } catch (e) {
-    print('❌ Error en sugerirMovimientoPorVoz: $e');
-    throw Exception('Error al procesar la sugerencia por voz: $e');
   }
-}
+
+  // 2. IA de Voz (Corrigiendo el nombre para el controlador)
+  // Laravel espera: { "transcripcion": "..." }
+  // Endpoint: /movements/sugerir-voz
+  Future<Map<String, dynamic>?> procesarVoz(String transcription) async {
+    final url = Uri.parse('${BaseUrl.apiUrl}movements/sugerir-voz');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({'transcripcion': transcription}),
+      );
+
+      print('🔵 procesarVoz status: ${response.statusCode}');
+      print('🔵 procesarVoz body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final data = json['data'];
+        print('🔵 procesarVoz data: $data');
+        if (data is Map) {
+          final suggestion = data['movement_suggestion'] ?? data;
+          print('🔵 procesarVoz suggestion: $suggestion');
+          return Map<String, dynamic>.from(suggestion);
+        }
+        return json['movement_suggestion'] != null
+            ? Map<String, dynamic>.from(json['movement_suggestion'])
+            : null;
+      } else {
+        print('🔴 procesarVoz error status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("DEBUG: Error procesarVoz: $e");
+    }
+    return null;
+  }
+
+  // 3. Crear Etiqueta Manualmente
+  Future<String?> createTag(String name) async {
+    final url = Uri.parse('${BaseUrl.apiUrl}tags/create');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({'name': name}),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['data']?['name'] ?? name;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // 4. Obtener Lista de Etiquetas
+  Future<List<String>> getTags() async {
+    final url = Uri.parse('${BaseUrl.apiUrl}tags');
+    try {
+      final response = await http.get(url, headers: await _getHeaders());
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        // Laravel: { status: success, data: [...] }
+        final List list = json['data'] ?? json['tags'] ?? [];
+        return list.map<String>((e) => (e['name'] ?? e['name_tag'] ?? '').toString()).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // 5. Sugerencia de Etiqueta (IA Texto)
+  Future<String?> getTagSuggestion(
+      {required String descripcion, required double monto}) async {
+    final url = Uri.parse('${BaseUrl.apiUrl}tags/suggestion');
+    try {
+      final response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({'descripcion': descripcion, 'monto': monto}),
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['data']?['tag'];
+      }
+    } catch (_) {}
+    return null;
+  }
 }

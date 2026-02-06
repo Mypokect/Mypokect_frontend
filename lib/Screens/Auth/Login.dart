@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../Controllers/auth_controller.dart';
-import '../../Theme/Theme.dart';
-import '../../Widgets/ButtonCustom.dart';
-import '../../Widgets/TextInput.dart';
-import '../../Widgets/TextWidget.dart';
-import 'package:flutter/services.dart';
-import 'Register.dart'; // O la ruta correcta donde lo guardaste
+import 'package:MyPocket/Controllers/auth_controller.dart';
+import 'package:MyPocket/Theme/theme.dart';
+import 'package:MyPocket/Widgets/common/button_custom.dart';
+import 'package:MyPocket/Widgets/common/text_input.dart';
+import 'package:MyPocket/Widgets/common/text_widget.dart';
+import 'package:flutter/services.dart' hide TextInput;
+import 'package:MyPocket/Screens/Auth/Register.dart'; // O la ruta correcta donde lo guardaste
+
 class Login extends StatefulWidget {
   const Login({super.key});
 
@@ -16,7 +17,6 @@ class Login extends StatefulWidget {
 }
 
 class _LoginState extends State<Login> {
-
   final AuthController _authController = AuthController();
 
   //controladores de texto
@@ -36,10 +36,7 @@ class _LoginState extends State<Login> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  _buildWidgetBody()
-                ],
+                children: [_buildHeader(), _buildWidgetBody()],
               ),
             ))
           ],
@@ -69,14 +66,16 @@ class _LoginState extends State<Login> {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Textwidget(text: 'Hola, Bienvenido', 
-            color: Colors.white, 
-            size: 30, 
+          TextWidget(
+            text: 'Hola, Bienvenido',
+            color: Colors.white,
+            size: 30,
             fontWeight: FontWeight.w600,
           ),
-          Textwidget(text: 'Inicia sesion para continuar...', 
-            color: Colors.white, 
-            size: 15, 
+          TextWidget(
+            text: 'Inicia sesion para continuar...',
+            color: Colors.white,
+            size: 15,
             fontWeight: FontWeight.w300,
           ),
         ],
@@ -93,45 +92,44 @@ class _LoginState extends State<Login> {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 20,
         children: [
-          Textwidget(
+          TextWidget(
               text: 'Iniciar Sesion',
               color: AppTheme.primaryColor,
               size: 30,
               fontWeight: FontWeight.w600),
-              
+
           // --- INPUT TELÉFONO ---
-          Textinput(
+          TextInput(
             hintText: 'Número de teléfono',
             controller: _phoneController,
             icon: SvgPicture.asset('assets/svg/user.svg'),
-            keyboardType: TextInputType.phone, 
+            keyboardType: TextInputType.phone,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
             ],
           ),
-          
+
           // --- INPUT PASSWORD ---
-          Textinput(
+          TextInput(
             hintText: 'Pin de seguridad',
             controller: _passwordController,
             obscureText: true,
             icon: SvgPicture.asset('assets/svg/password.svg'),
             keyboardType: TextInputType.number,
-            maxLength: 4, 
+            maxLength: 4,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
             ],
           ),
-          
+
           // --- BOTÓN LOGIN ---
-          Buttoncustom(
+          ButtonCustom(
             text: 'Iniciar Sesion',
             onTap: () async {
               await _authController.login(
-                phone: _phoneController.text, 
-                password: _passwordController.text, 
-                context: context
-              );
+                  phone: _phoneController.text,
+                  password: _passwordController.text,
+                  context: context);
             },
           ),
 
@@ -139,11 +137,8 @@ class _LoginState extends State<Login> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Textwidget(
-                text: '¿No tienes cuenta? ', 
-                color: Colors.grey, 
-                size: 14
-              ),
+              const TextWidget(
+                  text: '¿No tienes cuenta? ', color: Colors.grey, size: 14),
               GestureDetector(
                 onTap: () {
                   // Navegar a la pantalla de Registro
@@ -152,12 +147,11 @@ class _LoginState extends State<Login> {
                     MaterialPageRoute(builder: (context) => const Registro()),
                   );
                 },
-                child: Textwidget(
-                  text: 'Regístrate aquí', 
-                  color: AppTheme.primaryColor, 
-                  size: 14, 
-                  fontWeight: FontWeight.bold
-                ),
+                child: TextWidget(
+                    text: 'Regístrate aquí',
+                    color: AppTheme.primaryColor,
+                    size: 14,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           )

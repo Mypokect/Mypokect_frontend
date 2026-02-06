@@ -1,0 +1,42 @@
+// ignore: file_names
+import 'package:flutter/material.dart';
+
+class TextWidget extends StatelessWidget {
+  const TextWidget({
+    super.key,
+    required this.text,
+    this.size = 16,
+    this.color = Colors.black,
+    this.fontWeight = FontWeight.normal,
+    this.textAlign = TextAlign.start,
+    this.maxLines = 1,
+    this.overflow = TextOverflow.ellipsis,
+    this.textDecoration = TextDecoration.none,
+  });
+
+  final String text;
+  final double size;
+  final Color color;
+  final FontWeight fontWeight;
+  final TextAlign textAlign;
+  final int maxLines;
+  final TextOverflow overflow;
+  final TextDecoration textDecoration;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: size,
+        color: color,
+        fontWeight: fontWeight,
+        fontFamily: 'Baloo2',
+        decoration: textDecoration,
+      ),
+      textAlign: textAlign,
+      maxLines: maxLines,
+      overflow: overflow,
+    );
+  }
+}
