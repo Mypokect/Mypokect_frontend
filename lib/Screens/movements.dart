@@ -3,9 +3,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:MyPocket/Theme/Theme.dart';
-import 'package:MyPocket/Widgets/common/text_widget.dart';
-import 'package:MyPocket/Widgets/movements/animated_toggle_switch.dart';
-import 'package:MyPocket/Widgets/movements/campo_etiquetas.dart';
+import 'package:MyPocket/Widgets/TextWidget.dart';
+import 'package:MyPocket/Widgets/animated_toggle_switch.dart';
+import 'package:MyPocket/Widgets/campo_etiquetas.dart';
 import '../../Controllers/movement_controller.dart';
 // Nuevas importaciones
 import 'package:speech_to_text/speech_to_text.dart';
@@ -210,7 +210,7 @@ class _MovementsState extends State<Movements> {
             child: Column(
               children: [
                 const Spacer(flex: 1),
-                TextWidget(
+                Textwidget(
                   text: 'Dale un nombre a tu movimiento 💵',
                   size: 35,
                   color: Colors.black,
@@ -277,7 +277,7 @@ class _MovementsState extends State<Movements> {
                             _isListening ? Icons.mic_none : Icons.add,
                             color: Colors.grey[500],
                             size: 20),
-                        TextWidget(
+                        Textwidget(
                           text: _isListening
                               ? 'Escuchando...'
                               : 'Toca para hablar, mantén para guardar',
