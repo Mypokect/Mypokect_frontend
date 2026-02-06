@@ -4,7 +4,6 @@ import 'package:MyPocket/Theme/theme.dart';
 import 'package:MyPocket/Widgets/common/text_widget.dart';
 import 'package:MyPocket/Widgets/common/button_custom.dart';
 import 'package:MyPocket/Widgets/savings/savings_tab_switch_widget.dart';
-import 'package:MyPocket/Widgets/savings/savings_goal_card_widget.dart';
 import 'package:MyPocket/Widgets/savings/savings_info_row_widget.dart';
 import 'package:MyPocket/utils/helpers.dart';
 

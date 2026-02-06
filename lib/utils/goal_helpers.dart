@@ -265,7 +265,7 @@ class GoalHelpers {
 
   /// Convert color to hex string
   static String colorToHex(Color color) {
-    return '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+    return '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
   }
 
   /// Get icon from string identifier

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../Widgets/common/text_widget.dart';
 import '../../Theme/Theme.dart';
 import 'campo_etiquetas.dart';
 
@@ -63,20 +62,6 @@ class DataSection extends StatelessWidget {
           etiquetasUsuario: etiquetasUsuario,
           onEtiquetaSeleccionada: onEtiquetaSeleccionada,
         ),
-      ],
-    );
-  }
-
-  Widget _buildLabel(String text, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: AppTheme.greyColor),
-        const SizedBox(width: 6),
-        TextWidget(
-            text: text,
-            size: 10,
-            color: AppTheme.greyColor,
-            fontWeight: FontWeight.w900),
       ],
     );
   }

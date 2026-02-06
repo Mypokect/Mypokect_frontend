@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../api/movement_api.dart';
 import '../api/savings_goals_api.dart';
-import '../models/savings_goal.dart';
 import '../Core/Managers/tag_history_manager.dart';
 
 class MovementController {

@@ -189,7 +189,7 @@ class SavingsGoal {
       'name': name,
       'target_amount': targetAmount,
       'emoji': emoji,
-      'color': '#${color.toARGB32().toRadixString(16).substring(2)}',
+      'color': '#${color.value.toRadixString(16).substring(2)}',
       'deadline': deadline?.toIso8601String(),
     };
   }

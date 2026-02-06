@@ -294,9 +294,7 @@ class _SavingsGoalsScreenNewState extends State<SavingsGoalsScreenNew> {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => Movements(
-          preSelectedTag: goal.tag,
-        ),
+        builder: (context) => const Movements(),
       ),
     );
 

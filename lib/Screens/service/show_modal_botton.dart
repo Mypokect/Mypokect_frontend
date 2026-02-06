@@ -1,7 +1,7 @@
 import 'package:MyPocket/Theme/Theme.dart';
-import 'package:MyPocket/Widgets/TextInput.dart';
-import 'package:MyPocket/Widgets/TextWidget.dart';
-import 'package:MyPocket/Widgets/animated_toggle_switch.dart';
+import 'package:MyPocket/Widgets/common/text_input.dart' as custom_widgets;
+import 'package:MyPocket/Widgets/common/text_widget.dart';
+import 'package:MyPocket/Widgets/movements/animated_toggle_switch.dart';
 import 'package:MyPocket/Widgets/tipo_recordatorio_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,13 +40,13 @@ class ShowModalBotton extends StatelessWidget {
               ),
             ),
           ),
-          Textwidget(text: 'Registra un recordatorio', size: 25, fontWeight: FontWeight.bold, color: AppTheme.primaryColor,),
+          TextWidget(text: 'Registra un recordatorio', size: 25, fontWeight: FontWeight.bold, color: AppTheme.primaryColor,),
           SizedBox(height: 10,),
-          Textwidget(text: 'Agrega detalles importantes para no olvidar tus gastos futuros.', size: 16, fontWeight: FontWeight.normal, color: Colors.grey, maxLines: 2,),
+          TextWidget(text: 'Agrega detalles importantes para no olvidar tus gastos futuros.', size: 16, fontWeight: FontWeight.normal, color: Colors.grey, maxLines: 2,),
           SizedBox(height: 30,),
-          Textinput(controller: TextEditingController(), hintText: 'Titulo del recordatorio', icon: SvgPicture.asset('assets/svg/flag.svg'),),
+          custom_widgets.TextInput(controller: TextEditingController(), hintText: 'Titulo del recordatorio', icon: SvgPicture.asset('assets/svg/flag.svg'),),
           SizedBox(height: 20,),
-          Textinput(controller: TextEditingController(), hintText: 'monto', icon: SvgPicture.asset('assets/svg/cash.svg'),),
+          custom_widgets.TextInput(controller: TextEditingController(), hintText: 'monto', icon: SvgPicture.asset('assets/svg/cash.svg'),),
           SizedBox(height: 20,),
           Container(
             child: Row(

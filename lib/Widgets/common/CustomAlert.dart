@@ -13,10 +13,6 @@ class CustomAlert {
     if (!context.mounted) return;
 
     final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) {
-      debugPrint('❗ No se pudo obtener el overlay.');
-      return;
-    }
 
     late OverlayEntry entry;
 

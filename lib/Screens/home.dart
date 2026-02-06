@@ -1,5 +1,3 @@
-import 'package:MyPocket/Screens/service/simulator_view.dart';
-import 'package:MyPocket/api/user_api.dart';
 import 'package:flutter/material.dart';
 
 // TUS IMPORTS

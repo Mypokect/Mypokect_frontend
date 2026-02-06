@@ -165,7 +165,7 @@ class _AddReminderBottomSheetWidgetState
         onChanged: _isSaving
             ? null
             : (value) {
-                if (value != null) setState(() => _typeValue = value!);
+                if (value != null) setState(() => _typeValue = value);
               });
   }
 
@@ -183,7 +183,7 @@ class _AddReminderBottomSheetWidgetState
         onChanged: _isSaving
             ? null
             : (value) {
-                if (value != null) setState(() => _recurrenceValue = value!);
+                if (value != null) setState(() => _recurrenceValue = value);
               });
   }
 

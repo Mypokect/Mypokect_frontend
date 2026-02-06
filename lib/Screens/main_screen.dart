@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:MyPocket/Screens/Auth/Login.dart';
-import 'package:MyPocket/Screens/goals_screen.dart';
 import 'package:MyPocket/Screens/home.dart';
 import 'package:MyPocket/Screens/movements.dart';
 import 'package:MyPocket/Screens/service/budgets_list_screen.dart';

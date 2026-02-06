@@ -1,8 +1,9 @@
 import 'package:MyPocket/Screens/service/show_modal_botton.dart';
-import 'package:MyPocket/Widgets/TextWidget.dart';
+import 'package:MyPocket/Widgets/common/text_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
 import 'package:MyPocket/Theme/theme.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:MyPocket/Controllers/scheduled_transaction_controller.dart';
@@ -32,8 +33,6 @@ class _CalendarioPageState extends State<CalendarioPage> {
 
   final DateTime _today = DateTime.utc(
       DateTime.now().year, DateTime.now().month, DateTime.now().day);
-  final DateTime _today = DateTime.utc(
-      DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
   @override
   void initState() {
@@ -48,13 +47,6 @@ class _CalendarioPageState extends State<CalendarioPage> {
       setState(() {
         _isLoadingPage = true;
       });
-    if (!_isLoadingPage)
-      setState(() {
-        _isLoadingPage = true;
-      });
-
-    final occurrences = await _controller.getOccurrencesForMonth(
-        month.month, month.year, context);
 
     final occurrences = await _controller.getOccurrencesForMonth(
         month.month, month.year, context);
@@ -62,10 +54,6 @@ class _CalendarioPageState extends State<CalendarioPage> {
     final newEvents = <DateTime, List<TransactionOccurrence>>{};
     for (var occ in occurrences) {
       if (!occ.isPaid) {
-        final date = DateTime.parse(occ.date);
-        final normalizedDate = DateTime.utc(date.year, date.month, date.day);
-        if (newEvents[normalizedDate] == null) newEvents[normalizedDate] = [];
-        newEvents[normalizedDate]!.add(occ);
         final date = DateTime.parse(occ.date);
         final normalizedDate = DateTime.utc(date.year, date.month, date.day);
         if (newEvents[normalizedDate] == null) newEvents[normalizedDate] = [];
@@ -208,11 +196,6 @@ class _CalendarioPageState extends State<CalendarioPage> {
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    decoration: const BoxDecoration(
-                        color: Color(0xFFF8F9FA),
-                        borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(40),
-                            topRight: Radius.circular(40))),
                     decoration: const BoxDecoration(
                         color: Color(0xFFF8F9FA),
                         borderRadius: BorderRadius.only(

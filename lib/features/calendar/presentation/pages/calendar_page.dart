@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:table_calendar/table_calendar.dart' as tc;
 
 import '../../application/calendar_controller.dart';
-import '../../application/reminder_controller.dart';
 import '../theme/calendar_theme.dart';
 import '../widgets/calendar_scaffold.dart';
 import '../widgets/calendar_segmented_control.dart';

@@ -365,7 +365,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             spacing: 12,
             runSpacing: 12,
             children: _colorOptions.map((color) {
-              final isSelected = color.toARGB32() == _selectedColor.toARGB32();
+              final isSelected = color.value == _selectedColor.value;
               return GestureDetector(
                 onTap: () => setState(() => _selectedColor = color),
                 child: Container(
